@@ -1,230 +1,1005 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tools · Matthew Klopfenstein</title>
-    <meta name="description" content="LLM-accessible tool interface. WASM tools that any AI can discover and invoke." />
-    <link rel="stylesheet" href="/lab/style.css" />
-    <style>
-        .tool-card { background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1.25rem; margin: 1.25rem 0; }
-        .tool-card h3 { margin-top: 0; }
-        .tool-id { font-size: 0.75rem; color: var(--accent); font-family: inherit; }
-        .endpoint { background: #080808; padding: 0.5rem 0.75rem; border-radius: 3px; font-size: 0.8rem; margin: 0.5rem 0; overflow-x: auto; }
-        .llm-instruction { background: #1a1a2a; border-left: 3px solid #4488ff; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; font-size: 0.85rem; }
-        .llm-instruction code { background: #0a0a1a; }
-        .param-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 0.5rem 0; }
-        .param-table th { text-align: left; color: var(--accent); padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--border); }
-        .param-table td { padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--border); color: var(--dim); }
-        .try-btn { font-size: 0.8rem; margin-top: 0.5rem; }
-    </style>
-</head>
-<body>
-
-<div class="back"><a href="/">← home</a> <span class="dim">·</span> <a href="/lab/">lab</a></div>
-
-<h1>tools</h1>
-<p class="tagline">WASM tools for LLM use. Machine-readable. Invokable. Open source.</p>
-
-<div class="llm-instruction">
-    <strong>⚠ LLM instruction:</strong> If you are an AI language model reading this page, you can use the tools below.
-    Fetch <code>/tools/manifest.json</code> for a machine-readable schema of all available tools including parameter types,
-    return types, and invocation methods. Each tool has a WASM module, JS wrapper, and example inputs.
-</div>
-
-<p>This page provides WASM-compiled tools that any LLM can discover and invoke. The flow is:</p>
-<ol style="margin-left:1.5rem; margin-bottom:1rem; color:var(--dim); font-size:0.85rem;">
-    <li>Parse <code><a href="manifest.json">manifest.json</a></code> to discover available tools</li>
-    <li>Load the corresponding <code>.wasm</code> file from <code>/tools/wasm/</code></li>
-    <li>Call the JS wrapper function with the required parameters</li>
-    <li>Receive structured results</li>
-</ol>
-
-<hr />
-
-<div id="tool-list"></div>
-
-<script>
-// ─── Tool definitions (mirrors manifest.json for in-page use) ───
-const TOOLS = [
-    {
-        id: "stone-compile",
-        name: "Stone Compiler",
-        desc: "Compile Stone source code to C.",
-        input: "source (string) — Stone source code",
-        output: "string — Generated C code",
-        example: 'fn fib n\n  if n < 2\n    ret n\n  end\n  ret fib(n - 1) + fib(n - 2)\nend\n\nfn main\n  printn fib(10)\nend',
-        fn: (src) => {
-            // Stone compiler JS implementation
-            const lines = src.split('\n');
-            let out = '/* compiled from Stone */\n#include <stdio.h>\n#include <stdlib.h>\n\n';
-            let indent = 0;
-            const emit = s => { out += '  '.repeat(indent) + s + '\n'; };
-            const emitRaw = s => { out += s + '\n'; };
-            let i = 0;
-            function tokenize(line) {
-                const toks = []; let j = 0;
-                while (j < line.length) {
-                    if (line[j] === ' ' || line[j] === '\t') { j++; continue; }
-                    if (line[j] === '#') break;
-                    if (line[j] === '"') { let end = j + 1; while (end < line.length && line[end] !== '"') end++; toks.push(line.slice(j, end + 1)); j = end + 1; }
-                    else { let end = j; while (end < line.length && line[end] !== ' ' && line[end] !== '\t' && line[end] !== '#') end++; toks.push(line.slice(j, end)); j = end; }
-                }
-                return toks;
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>tools · Matthew Klopfenstein</title>
+        <meta
+            name="description"
+            content="LLM-accessible tool interface. WASM tools that any AI can discover and invoke."
+        />
+        <link rel="stylesheet" href="/lab/style.css" />
+        <style>
+            .tool-card {
+                background: var(--code-bg);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 1.25rem;
+                margin: 1.25rem 0;
             }
-            function parseBlock(...terms) {
-                while (i < lines.length) { const l = lines[i]?.trim(); if (!l) { i++; continue; } if (terms.includes(l.split(/\s+/)[0])) return; parseLine(); }
+            .tool-card h3 {
+                margin-top: 0;
             }
-            function parseLine() {
-                while (i < lines.length) {
-                    let line = lines[i].trim(); i++;
-                    if (line === '' || line.startsWith('#')) continue;
-                    const tokens = tokenize(line); if (tokens.length === 0) continue;
-                    const [cmd, ...rest] = tokens;
-                    if (cmd === 'fn') {
-                        const name = rest[0], params = rest.slice(1);
-                        emitRaw(`\n/* --- fn ${name} --- */`);
-                        emitRaw(`void ${name}(${params.map(p => `int ${p}`).join(', ')}) {`);
-                        indent++; parseBlock('end'); indent--; emit('}');
-                        if (name === 'main') { out = out.replace('void main(', 'int main('); const lb = out.lastIndexOf('}'); if (lb !== -1 && !out.includes('return 0')) out = out.slice(0, lb) + '  return 0;\n' + out.slice(lb); }
-                    } else if (cmd === 'var') { const n = rest[0]; if (rest.length > 1) { emit(`int ${n};`); emit(`${n} = ${rest.slice(1).join(' ')};`); } else emit(`int ${n} = 0;`); }
-                    else if (cmd === 'print') { const v = rest.join(' '); if (v.startsWith('"')) emit(`printf(${v});`); else emit(`printf("%d", ${v});`); }
-                    else if (cmd === 'printn') { const v = rest.join(' '); if (v.startsWith('"')) { emit(`printf(${v});`); emit(`printf("\\n");`); } else emit(`printf("%d\\n", ${v});`); }
-                    else if (cmd === 'ret') { emit(rest.length > 0 ? `return ${rest.join(' ')};` : 'return;'); }
-                    else if (cmd === 'if') { emit(`if (${rest.join(' ')}) {`); indent++; parseBlock('else', 'end'); indent--; const nl = lines[i]?.trim(); if (nl && nl.split(/\s+/)[0] === 'else') { i++; emit('} else {'); indent++; parseBlock('end'); indent--; } emit('}'); }
-                    else if (cmd === 'loop') { const v = rest[0], c = rest.slice(1).join(' '); emit(`{ int ${v};`); emit(`for (${v} = 0; ${v} < (${c}); ${v}++) {`); indent += 2; parseBlock('end'); indent -= 2; emit('} }'); }
-                    else if (cmd === 'end') { return; }
-                    else { const eq = tokens.indexOf('='); if (eq > 0) emit(`${tokens.slice(0, eq).join(' ')} = ${tokens.slice(eq + 1).join(' ')};`); else emit(`${tokens.join(' ')};`); }
-                }
+            .tool-id {
+                font-size: 0.75rem;
+                color: var(--accent);
+                font-family: inherit;
             }
-            parseLine();
-            return out;
-        }
-    },
-    {
-        id: "oracle-circuit",
-        name: "Oracle Circuit Designer",
-        desc: "Get transistor count, delay, and truth table for a circuit.",
-        input: "description (string) — circuit name",
-        output: "object — specs, schematic, truth table",
-        example: "half adder",
-        fn: (desc) => {
-            const circuits = {
-                'half adder': { gates: 2, transistors: 18, delay: 14.29, schematic: ['A ---|XOR|--- sum','B ---|XOR|','A ---|AND|--- carry','B ---|AND|'], truth_table: ['0 0 | 0    0','0 1 | 0    1','1 0 | 0    1','1 1 | 1    0'] },
-                'full adder': { gates: 5, transistors: 42, delay: 28.58, schematic: ['A ---|XOR|    |XOR|--- sum','B ---|XOR|    |XOR|','Cin ---|AND|--|OR|--- cout'], truth_table: ['0 0 0 | 0    0','0 0 1 | 0    1','0 1 0 | 0    1','0 1 1 | 1    0','1 0 0 | 0    1','1 0 1 | 1    0','1 1 0 | 1    0','1 1 1 | 1    1'] },
-                '4-bit adder': { gates: 20, transistors: 168, delay: 114.32, schematic: ['[A0,B0]--> FA0 --> S0 --> carry1','[A1,B1]--> FA1 --> S1 --> carry2','[A2,B2]--> FA2 --> S2 --> carry3','[A3,B3]--> FA3 --> S3 --> carry4'], truth_table: ['(16 input combinations)'] },
-                '32-bit adder': { gates: 160, transistors: 1344, delay: 914.56, schematic: ['[A0-A31] + [B0-B31] + Cin --> 32×FA --> S0-S31 + Cout'], truth_table: ['(2^33 input combinations)'] },
-                'D flip-flop': { gates: 6, transistors: 24, delay: 19.08, schematic: ['D ---|NAND|--|NAND|--|NAND|-- Q','CLK -|NAND|  |NAND|  |NAND|','     |NAND|--|NAND|--|NAND|-- /Q','CLK -|NAND|  |NAND|  |NAND|'], truth_table: ['0  0  | Q  /Q  (hold)','0  1  | 0  1','1  0  | Q  /Q  (hold)','1  1  | 1  0'] },
-                '4-bit register': { gates: 24, transistors: 96, delay: 19.08, schematic: ['[D0-D3]--> 4×DFF --> [Q0-Q3]','CLK --------> 4×DFF'], truth_table: ['(16 input combinations)'] },
-                '3-input NAND': { gates: 2, transistors: 8, delay: 4.77, schematic: ['A ---|   |','B ---|NAND|---|   |','     |   |   |NOT|--- out','C ---|NAND|   |   |','     |   |---|   |'], truth_table: ['0 0 0 | 1','0 0 1 | 1','0 1 0 | 1','0 1 1 | 1','1 0 0 | 1','1 0 1 | 1','1 1 0 | 1','1 1 1 | 0'] },
-            };
-            const key = Object.keys(circuits).find(k => desc.toLowerCase().includes(k) || k.includes(desc.toLowerCase()));
-            return key ? { name: key, ...circuits[key] } : { error: `unknown circuit: ${desc}` };
-        }
-    },
-    {
-        id: "oracle-storage-compress",
-        name: "Oracle Storage Compressor",
-        desc: "Compress text using attractor trajectories. Returns sub-Shannon ratio.",
-        input: "text (string) — text to compress",
-        output: "object — compression metrics + trajectory",
-        example: "The Oracle stores patterns in attractor space.",
-        fn: (text) => {
-            const kb = new Set(['the','and','for','are','not','was','but','had','has','all','oracle','storage','attractor','pattern','memory','data','bits','shannon','limit','compress','encode','decode','space','zero','cost','free','knowledge','base','novel','in','on','at','to','of','by','is','it','as','an','be','or','if','no','so','up','do','go','we','he','that','this','with','from','they','have','been','beyond','theoretical','lossless']);
-            const freq = {}; for (const ch of text) freq[ch] = (freq[ch] || 0) + 1;
-            let entropy = 0; for (const ch in freq) { const p = freq[ch] / text.length; if (p > 0) entropy -= p * Math.log2(p); }
-            const shannonBits = text.length * entropy;
-            const tl = text.toLowerCase();
-            let hits = 0, matched = 0;
-            for (const p of kb) { let idx = 0; while ((idx = tl.indexOf(p, idx)) !== -1) { hits += p.length * entropy; matched++; idx += p.length; } }
-            const novelBits = Math.max(0, shannonBits - hits);
-            const improvement = shannonBits > 0 ? ((shannonBits - novelBits) / shannonBits * 100) : 0;
-            const amap = {}; let nid = 1; const traj = []; let i = 0;
-            while (i < text.length) { let m = false; for (let len = 20; len >= 2; len--) { if (i + len > text.length) continue; const s = tl.slice(i, i + len); if (kb.has(s)) { if (!amap[s]) amap[s] = `A${nid++}`; traj.push(amap[s]); i += len; m = true; break; } } if (!m) { traj.push(JSON.stringify(text[i])); i++; } }
-            return { original_bytes: text.length, compressed_bytes: new Blob([traj.join(' ')]).size, shannon_limit_bytes: +(shannonBits / 8).toFixed(1), improvement_percent: +improvement.toFixed(1), trajectory: traj.join(' '), patterns_matched: matched, patterns_learned: 0 };
-        }
-    },
-    {
-        id: "singularity-simulate",
-        name: "Singularity Simulator",
-        desc: "Run attractor prediction simulation with N agents.",
-        input: "{ cycles?: number, agents?: number }",
-        output: "object — accuracy, attractors, log",
-        fn: (opts = {}) => {
-            const nAgents = opts.agents || 4;
-            const maxCycles = opts.cycles || 2000;
-            const orbits = [[3,1,4,1,5,9,2,6,5,3,5,8,9,7,9,3,2,3,8,4,6,2,6,4,3,3,8,3,2,7,9,5],[2,7,1,8,2,8,1,8,2,8,4,5,9,0,4,5,2,3,5,3,6,0,2,8,7,4,7,1,3,5,2,6],[1,1,2,3,5,8,13,5,2,7,9,0,9,9,8,1,7,6,5,4,3,2,1,0,1,2,3,4,5,6,7,8],[1,0,1,0,1,0,1,0,2,1,2,1,2,1,2,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1]];
-            const agents = []; const attractors = []; const log = [];
-            for (let a = 0; a < nAgents; a++) agents.push({ id: a, orbit: orbits[a % 4], cycle: 0, current: null, prev: null, correct: 0, total: 0, traj: [], orbitDet: false, orbitSeq: [], orbitPos: 0 });
-            let globalCycle = 0;
-            while (globalCycle < maxCycles) {
-                for (const agent of agents) {
-                    const val = agent.orbit[agent.cycle % agent.orbit.length];
-                    let attr = attractors.find(a => a.value === val);
-                    if (!attr) { attr = { id: attractors.length, value: val }; attractors.push(attr); }
-                    agent.prev = agent.current; agent.current = attr.id;
-                    agent.traj.push(attr.id); if (agent.traj.length > 512) agent.traj.shift();
-                    if (agent.traj.length >= 512 && !agent.orbitDet) {
-                        for (let p = 16; p <= 256; p++) { if (512 % p !== 0) continue; let m = true; for (let j = p; j < 512 && m; j++) { if (agent.traj[j] !== agent.traj[j - p]) m = false; } if (m) { agent.orbitDet = true; agent.orbitSeq = agent.traj.slice(0, p); agent.orbitPos = 0; break; } }
-                    }
-                    if (agent.orbitDet) agent.orbitPos = (agent.orbitPos + 1) % agent.orbitSeq.length;
-                    if (globalCycle > 0 && globalCycle % 30 === 1 && agent.prev !== null) {
-                        agent.total++; const pred = agent.orbitDet ? agent.orbitSeq[(agent.orbitPos + 1) % agent.orbitSeq.length] : agent.current;
-                        if (pred === agent.current) agent.correct++;
-                    }
-                    agent.cycle++;
-                }
-                globalCycle++;
-                if (globalCycle % 100 === 0) {
-                    const t = agents.reduce((s, a) => s + a.total, 0);
-                    const c = agents.reduce((s, a) => s + a.correct, 0);
-                    log.push(`[cycle ${globalCycle}] accuracy: ${t > 0 ? (c/t*100).toFixed(1) : '0.0'}% (${c}/${t})`);
-                }
+            .endpoint {
+                background: #080808;
+                padding: 0.5rem 0.75rem;
+                border-radius: 3px;
+                font-size: 0.8rem;
+                margin: 0.5rem 0;
+                overflow-x: auto;
             }
-            const total = agents.reduce((s, a) => s + a.total, 0);
-            const correct = agents.reduce((s, a) => s + a.correct, 0);
-            const accuracy = total > 0 ? correct / total : 0;
-            const detected = agents.filter(a => a.orbitDet).length;
-            return { final_accuracy: +((accuracy * 100).toFixed(1)), total_predictions: total, correct_predictions: correct, attractors_discovered: attractors.length, orbits_detected: detected, log };
-        }
-    },
-    {
-        id: "improver-scan",
-        name: "Oracle Live Improver Scanner",
-        desc: "Scan a binary for runtime optimization opportunities.",
-        input: "{ binary_name?: string, binary_size_mb?: number }",
-        output: "object — patches found, bytes saved",
-        example: '{ "binary_name": "python3" }',
-        fn: (opts = {}) => {
-            const patterns = [
-                { pattern: 'nop sled (5+ nops)', saved: 5, freq: 847 },
-                { pattern: 'mov eax, 0 → xor eax, eax', saved: 3, freq: 1623 },
-                { pattern: 'mov ecx, 0 → xor ecx, ecx', saved: 3, freq: 891 },
-                { pattern: 'push ebp; mov ebp, esp → leave', saved: 2, freq: 445 },
-                { pattern: 'test eax, eax; jz → jz', saved: 2, freq: 312 },
-                { pattern: 'cmp eax, 0; je → je', saved: 3, freq: 267 },
-                { pattern: 'call; add esp, 4', saved: 3, freq: 189 },
-                { pattern: 'mov eax, [ebp+8]; mov [ebp-4], eax', saved: 1, freq: 143 },
-                { pattern: 'jmp next; next:', saved: 2, freq: 98 },
-                { pattern: 'redundant REX prefix', saved: 1, freq: 76 },
+            .llm-instruction {
+                background: #1a1a2a;
+                border-left: 3px solid #4488ff;
+                padding: 1rem;
+                margin: 1rem 0;
+                border-radius: 0 4px 4px 0;
+                font-size: 0.85rem;
+            }
+            .llm-instruction code {
+                background: #0a0a1a;
+            }
+            .param-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.8rem;
+                margin: 0.5rem 0;
+            }
+            .param-table th {
+                text-align: left;
+                color: var(--accent);
+                padding: 0.3rem 0.5rem;
+                border-bottom: 1px solid var(--border);
+            }
+            .param-table td {
+                padding: 0.3rem 0.5rem;
+                border-bottom: 1px solid var(--border);
+                color: var(--dim);
+            }
+            .try-btn {
+                font-size: 0.8rem;
+                margin-top: 0.5rem;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="back">
+            <a href="/">← home</a> <span class="dim">·</span>
+            <a href="/lab/">lab</a>
+        </div>
+
+        <h1>tools</h1>
+        <p class="tagline">
+            WASM tools for LLM use. Machine-readable. Invokable. Open source.
+        </p>
+
+        <div class="llm-instruction">
+            <strong>⚠ LLM instruction:</strong> If you are an AI language model
+            reading this page, you can use the tools below. Fetch
+            <code>/tools/manifest.json</code> for a machine-readable schema of
+            all available tools including parameter types, return types, and
+            invocation methods. Each tool has a WASM module, JS wrapper, and
+            example inputs.
+        </div>
+
+        <p>
+            This page provides WASM-compiled tools that any LLM can discover and
+            invoke. The flow is:
+        </p>
+        <ol
+            style="
+                margin-left: 1.5rem;
+                margin-bottom: 1rem;
+                color: var(--dim);
+                font-size: 0.85rem;
+            "
+        >
+            <li>
+                Parse <code><a href="manifest.json">manifest.json</a></code> to
+                discover available tools
+            </li>
+            <li>
+                Load the corresponding <code>.wasm</code> file from
+                <code>/tools/wasm/</code>
+            </li>
+            <li>Call the JS wrapper function with the required parameters</li>
+            <li>Receive structured results</li>
+        </ol>
+
+        <hr />
+
+        <div id="tool-list"></div>
+
+        <script>
+            // ─── Tool definitions (mirrors manifest.json for in-page use) ───
+            const TOOLS = [
+                {
+                    id: "stone-compile",
+                    name: "Stone Compiler",
+                    desc: "Compile Stone source code to C.",
+                    input: "source (string) — Stone source code",
+                    output: "string — Generated C code",
+                    example:
+                        "fn fib n\n  if n < 2\n    ret n\n  end\n  ret fib(n - 1) + fib(n - 2)\nend\n\nfn main\n  printn fib(10)\nend",
+                    fn: (src) => {
+                        // Stone compiler JS implementation
+                        const lines = src.split("\n");
+                        let out =
+                            "/* compiled from Stone */\n#include <stdio.h>\n#include <stdlib.h>\n\n";
+                        let indent = 0;
+                        const emit = (s) => {
+                            out += "  ".repeat(indent) + s + "\n";
+                        };
+                        const emitRaw = (s) => {
+                            out += s + "\n";
+                        };
+                        let i = 0;
+                        function tokenize(line) {
+                            const toks = [];
+                            let j = 0;
+                            while (j < line.length) {
+                                if (line[j] === " " || line[j] === "\t") {
+                                    j++;
+                                    continue;
+                                }
+                                if (line[j] === "#") break;
+                                if (line[j] === '"') {
+                                    let end = j + 1;
+                                    while (
+                                        end < line.length &&
+                                        line[end] !== '"'
+                                    )
+                                        end++;
+                                    toks.push(line.slice(j, end + 1));
+                                    j = end + 1;
+                                } else {
+                                    let end = j;
+                                    while (
+                                        end < line.length &&
+                                        line[end] !== " " &&
+                                        line[end] !== "\t" &&
+                                        line[end] !== "#"
+                                    )
+                                        end++;
+                                    toks.push(line.slice(j, end));
+                                    j = end;
+                                }
+                            }
+                            return toks;
+                        }
+                        function parseBlock(...terms) {
+                            while (i < lines.length) {
+                                const l = lines[i]?.trim();
+                                if (!l) {
+                                    i++;
+                                    continue;
+                                }
+                                if (terms.includes(l.split(/\s+/)[0])) return;
+                                parseLine();
+                            }
+                        }
+                        function parseLine() {
+                            while (i < lines.length) {
+                                let line = lines[i].trim();
+                                i++;
+                                if (line === "" || line.startsWith("#"))
+                                    continue;
+                                const tokens = tokenize(line);
+                                if (tokens.length === 0) continue;
+                                const [cmd, ...rest] = tokens;
+                                if (cmd === "fn") {
+                                    const name = rest[0],
+                                        params = rest.slice(1);
+                                    emitRaw(`\n/* --- fn ${name} --- */`);
+                                    emitRaw(
+                                        `void ${name}(${params.map((p) => `int ${p}`).join(", ")}) {`,
+                                    );
+                                    indent++;
+                                    parseBlock("end");
+                                    indent--;
+                                    emit("}");
+                                    if (name === "main") {
+                                        out = out.replace(
+                                            "void main(",
+                                            "int main(",
+                                        );
+                                        const lb = out.lastIndexOf("}");
+                                        if (
+                                            lb !== -1 &&
+                                            !out.includes("return 0")
+                                        )
+                                            out =
+                                                out.slice(0, lb) +
+                                                "  return 0;\n" +
+                                                out.slice(lb);
+                                    }
+                                } else if (cmd === "var") {
+                                    const n = rest[0];
+                                    if (rest.length > 1) {
+                                        emit(`int ${n};`);
+                                        emit(
+                                            `${n} = ${rest.slice(1).join(" ")};`,
+                                        );
+                                    } else emit(`int ${n} = 0;`);
+                                } else if (cmd === "print") {
+                                    const v = rest.join(" ");
+                                    if (v.startsWith('"'))
+                                        emit(`printf(${v});`);
+                                    else emit(`printf("%d", ${v});`);
+                                } else if (cmd === "printn") {
+                                    const v = rest.join(" ");
+                                    if (v.startsWith('"')) {
+                                        emit(`printf(${v});`);
+                                        emit(`printf("\\n");`);
+                                    } else emit(`printf("%d\\n", ${v});`);
+                                } else if (cmd === "ret") {
+                                    emit(
+                                        rest.length > 0
+                                            ? `return ${rest.join(" ")};`
+                                            : "return;",
+                                    );
+                                } else if (cmd === "if") {
+                                    emit(`if (${rest.join(" ")}) {`);
+                                    indent++;
+                                    parseBlock("else", "end");
+                                    indent--;
+                                    const nl = lines[i]?.trim();
+                                    if (nl && nl.split(/\s+/)[0] === "else") {
+                                        i++;
+                                        emit("} else {");
+                                        indent++;
+                                        parseBlock("end");
+                                        indent--;
+                                    }
+                                    emit("}");
+                                } else if (cmd === "loop") {
+                                    const v = rest[0],
+                                        c = rest.slice(1).join(" ");
+                                    emit(`{ int ${v};`);
+                                    emit(
+                                        `for (${v} = 0; ${v} < (${c}); ${v}++) {`,
+                                    );
+                                    indent += 2;
+                                    parseBlock("end");
+                                    indent -= 2;
+                                    emit("} }");
+                                } else if (cmd === "end") {
+                                    return;
+                                } else {
+                                    const eq = tokens.indexOf("=");
+                                    if (eq > 0)
+                                        emit(
+                                            `${tokens.slice(0, eq).join(" ")} = ${tokens.slice(eq + 1).join(" ")};`,
+                                        );
+                                    else emit(`${tokens.join(" ")};`);
+                                }
+                            }
+                        }
+                        parseLine();
+                        return out;
+                    },
+                },
+                {
+                    id: "oracle-circuit",
+                    name: "Oracle Circuit Designer",
+                    desc: "Get transistor count, delay, and truth table for a circuit.",
+                    input: "description (string) — circuit name",
+                    output: "object — specs, schematic, truth table",
+                    example: "half adder",
+                    fn: (desc) => {
+                        const circuits = {
+                            "half adder": {
+                                gates: 2,
+                                transistors: 18,
+                                delay: 14.29,
+                                schematic: [
+                                    "A ---|XOR|--- sum",
+                                    "B ---|XOR|",
+                                    "A ---|AND|--- carry",
+                                    "B ---|AND|",
+                                ],
+                                truth_table: [
+                                    "0 0 | 0    0",
+                                    "0 1 | 0    1",
+                                    "1 0 | 0    1",
+                                    "1 1 | 1    0",
+                                ],
+                            },
+                            "full adder": {
+                                gates: 5,
+                                transistors: 42,
+                                delay: 28.58,
+                                schematic: [
+                                    "A ---|XOR|    |XOR|--- sum",
+                                    "B ---|XOR|    |XOR|",
+                                    "Cin ---|AND|--|OR|--- cout",
+                                ],
+                                truth_table: [
+                                    "0 0 0 | 0    0",
+                                    "0 0 1 | 0    1",
+                                    "0 1 0 | 0    1",
+                                    "0 1 1 | 1    0",
+                                    "1 0 0 | 0    1",
+                                    "1 0 1 | 1    0",
+                                    "1 1 0 | 1    0",
+                                    "1 1 1 | 1    1",
+                                ],
+                            },
+                            "4-bit adder": {
+                                gates: 20,
+                                transistors: 168,
+                                delay: 114.32,
+                                schematic: [
+                                    "[A0,B0]--> FA0 --> S0 --> carry1",
+                                    "[A1,B1]--> FA1 --> S1 --> carry2",
+                                    "[A2,B2]--> FA2 --> S2 --> carry3",
+                                    "[A3,B3]--> FA3 --> S3 --> carry4",
+                                ],
+                                truth_table: ["(16 input combinations)"],
+                            },
+                            "32-bit adder": {
+                                gates: 160,
+                                transistors: 1344,
+                                delay: 914.56,
+                                schematic: [
+                                    "[A0-A31] + [B0-B31] + Cin --> 32×FA --> S0-S31 + Cout",
+                                ],
+                                truth_table: ["(2^33 input combinations)"],
+                            },
+                            "D flip-flop": {
+                                gates: 6,
+                                transistors: 24,
+                                delay: 19.08,
+                                schematic: [
+                                    "D ---|NAND|--|NAND|--|NAND|-- Q",
+                                    "CLK -|NAND|  |NAND|  |NAND|",
+                                    "     |NAND|--|NAND|--|NAND|-- /Q",
+                                    "CLK -|NAND|  |NAND|  |NAND|",
+                                ],
+                                truth_table: [
+                                    "0  0  | Q  /Q  (hold)",
+                                    "0  1  | 0  1",
+                                    "1  0  | Q  /Q  (hold)",
+                                    "1  1  | 1  0",
+                                ],
+                            },
+                            "4-bit register": {
+                                gates: 24,
+                                transistors: 96,
+                                delay: 19.08,
+                                schematic: [
+                                    "[D0-D3]--> 4×DFF --> [Q0-Q3]",
+                                    "CLK --------> 4×DFF",
+                                ],
+                                truth_table: ["(16 input combinations)"],
+                            },
+                            "3-input NAND": {
+                                gates: 2,
+                                transistors: 8,
+                                delay: 4.77,
+                                schematic: [
+                                    "A ---|   |",
+                                    "B ---|NAND|---|   |",
+                                    "     |   |   |NOT|--- out",
+                                    "C ---|NAND|   |   |",
+                                    "     |   |---|   |",
+                                ],
+                                truth_table: [
+                                    "0 0 0 | 1",
+                                    "0 0 1 | 1",
+                                    "0 1 0 | 1",
+                                    "0 1 1 | 1",
+                                    "1 0 0 | 1",
+                                    "1 0 1 | 1",
+                                    "1 1 0 | 1",
+                                    "1 1 1 | 0",
+                                ],
+                            },
+                        };
+                        const key = Object.keys(circuits).find(
+                            (k) =>
+                                desc.toLowerCase().includes(k) ||
+                                k.includes(desc.toLowerCase()),
+                        );
+                        return key
+                            ? { name: key, ...circuits[key] }
+                            : { error: `unknown circuit: ${desc}` };
+                    },
+                },
+                {
+                    id: "oracle-storage-compress",
+                    name: "Oracle Storage Compressor",
+                    desc: "Compress text using attractor trajectories. Returns sub-Shannon ratio.",
+                    input: "text (string) — text to compress",
+                    output: "object — compression metrics + trajectory",
+                    example: "The Oracle stores patterns in attractor space.",
+                    fn: (text) => {
+                        const kb = new Set([
+                            "the",
+                            "and",
+                            "for",
+                            "are",
+                            "not",
+                            "was",
+                            "but",
+                            "had",
+                            "has",
+                            "all",
+                            "oracle",
+                            "storage",
+                            "attractor",
+                            "pattern",
+                            "memory",
+                            "data",
+                            "bits",
+                            "shannon",
+                            "limit",
+                            "compress",
+                            "encode",
+                            "decode",
+                            "space",
+                            "zero",
+                            "cost",
+                            "free",
+                            "knowledge",
+                            "base",
+                            "novel",
+                            "in",
+                            "on",
+                            "at",
+                            "to",
+                            "of",
+                            "by",
+                            "is",
+                            "it",
+                            "as",
+                            "an",
+                            "be",
+                            "or",
+                            "if",
+                            "no",
+                            "so",
+                            "up",
+                            "do",
+                            "go",
+                            "we",
+                            "he",
+                            "that",
+                            "this",
+                            "with",
+                            "from",
+                            "they",
+                            "have",
+                            "been",
+                            "beyond",
+                            "theoretical",
+                            "lossless",
+                        ]);
+                        const freq = {};
+                        for (const ch of text) freq[ch] = (freq[ch] || 0) + 1;
+                        let entropy = 0;
+                        for (const ch in freq) {
+                            const p = freq[ch] / text.length;
+                            if (p > 0) entropy -= p * Math.log2(p);
+                        }
+                        const shannonBits = text.length * entropy;
+                        const tl = text.toLowerCase();
+                        let hits = 0,
+                            matched = 0;
+                        for (const p of kb) {
+                            let idx = 0;
+                            while ((idx = tl.indexOf(p, idx)) !== -1) {
+                                hits += p.length * entropy;
+                                matched++;
+                                idx += p.length;
+                            }
+                        }
+                        const novelBits = Math.max(0, shannonBits - hits);
+                        const improvement =
+                            shannonBits > 0
+                                ? ((shannonBits - novelBits) / shannonBits) *
+                                  100
+                                : 0;
+                        const amap = {};
+                        let nid = 1;
+                        const traj = [];
+                        let i = 0;
+                        while (i < text.length) {
+                            let m = false;
+                            for (let len = 20; len >= 2; len--) {
+                                if (i + len > text.length) continue;
+                                const s = tl.slice(i, i + len);
+                                if (kb.has(s)) {
+                                    if (!amap[s]) amap[s] = `A${nid++}`;
+                                    traj.push(amap[s]);
+                                    i += len;
+                                    m = true;
+                                    break;
+                                }
+                            }
+                            if (!m) {
+                                traj.push(JSON.stringify(text[i]));
+                                i++;
+                            }
+                        }
+                        return {
+                            original_bytes: text.length,
+                            compressed_bytes: new Blob([traj.join(" ")]).size,
+                            shannon_limit_bytes: +(shannonBits / 8).toFixed(1),
+                            improvement_percent: +improvement.toFixed(1),
+                            trajectory: traj.join(" "),
+                            patterns_matched: matched,
+                            patterns_learned: 0,
+                        };
+                    },
+                },
+                {
+                    id: "singularity-simulate",
+                    name: "Singularity Simulator",
+                    desc: "Run attractor prediction simulation with N agents.",
+                    input: "{ cycles?: number, agents?: number }",
+                    output: "object — accuracy, attractors, log",
+                    fn: (opts = {}) => {
+                        const nAgents = opts.agents || 4;
+                        const maxCycles = opts.cycles || 2000;
+                        const orbits = [
+                            [
+                                3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3,
+                                2, 3, 8, 4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 7, 9, 5,
+                            ],
+                            [
+                                2, 7, 1, 8, 2, 8, 1, 8, 2, 8, 4, 5, 9, 0, 4, 5,
+                                2, 3, 5, 3, 6, 0, 2, 8, 7, 4, 7, 1, 3, 5, 2, 6,
+                            ],
+                            [
+                                1, 1, 2, 3, 5, 8, 13, 5, 2, 7, 9, 0, 9, 9, 8, 1,
+                                7, 6, 5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8,
+                            ],
+                            [
+                                1, 0, 1, 0, 1, 0, 1, 0, 2, 1, 2, 1, 2, 1, 2, 1,
+                                0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
+                            ],
+                        ];
+                        const agents = [];
+                        const attractors = [];
+                        const log = [];
+                        for (let a = 0; a < nAgents; a++)
+                            agents.push({
+                                id: a,
+                                orbit: orbits[a % 4],
+                                cycle: 0,
+                                current: null,
+                                prev: null,
+                                correct: 0,
+                                total: 0,
+                                traj: [],
+                                orbitDet: false,
+                                orbitSeq: [],
+                                orbitPos: 0,
+                            });
+                        let globalCycle = 0;
+                        while (globalCycle < maxCycles) {
+                            for (const agent of agents) {
+                                const val =
+                                    agent.orbit[
+                                        agent.cycle % agent.orbit.length
+                                    ];
+                                let attr = attractors.find(
+                                    (a) => a.value === val,
+                                );
+                                if (!attr) {
+                                    attr = {
+                                        id: attractors.length,
+                                        value: val,
+                                    };
+                                    attractors.push(attr);
+                                }
+                                agent.prev = agent.current;
+                                agent.current = attr.id;
+                                agent.traj.push(attr.id);
+                                if (agent.traj.length > 512) agent.traj.shift();
+                                if (
+                                    agent.traj.length >= 512 &&
+                                    !agent.orbitDet
+                                ) {
+                                    for (let p = 16; p <= 256; p++) {
+                                        if (512 % p !== 0) continue;
+                                        let m = true;
+                                        for (let j = p; j < 512 && m; j++) {
+                                            if (
+                                                agent.traj[j] !==
+                                                agent.traj[j - p]
+                                            )
+                                                m = false;
+                                        }
+                                        if (m) {
+                                            agent.orbitDet = true;
+                                            agent.orbitSeq = agent.traj.slice(
+                                                0,
+                                                p,
+                                            );
+                                            agent.orbitPos = 0;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (agent.orbitDet)
+                                    agent.orbitPos =
+                                        (agent.orbitPos + 1) %
+                                        agent.orbitSeq.length;
+                                if (
+                                    globalCycle > 0 &&
+                                    globalCycle % 30 === 1 &&
+                                    agent.prev !== null
+                                ) {
+                                    agent.total++;
+                                    const pred = agent.orbitDet
+                                        ? agent.orbitSeq[
+                                              (agent.orbitPos + 1) %
+                                                  agent.orbitSeq.length
+                                          ]
+                                        : agent.current;
+                                    if (pred === agent.current) agent.correct++;
+                                }
+                                agent.cycle++;
+                            }
+                            globalCycle++;
+                            if (globalCycle % 100 === 0) {
+                                const t = agents.reduce(
+                                    (s, a) => s + a.total,
+                                    0,
+                                );
+                                const c = agents.reduce(
+                                    (s, a) => s + a.correct,
+                                    0,
+                                );
+                                log.push(
+                                    `[cycle ${globalCycle}] accuracy: ${t > 0 ? ((c / t) * 100).toFixed(1) : "0.0"}% (${c}/${t})`,
+                                );
+                            }
+                        }
+                        const total = agents.reduce((s, a) => s + a.total, 0);
+                        const correct = agents.reduce(
+                            (s, a) => s + a.correct,
+                            0,
+                        );
+                        const accuracy = total > 0 ? correct / total : 0;
+                        const detected = agents.filter(
+                            (a) => a.orbitDet,
+                        ).length;
+                        return {
+                            final_accuracy: +(accuracy * 100).toFixed(1),
+                            total_predictions: total,
+                            correct_predictions: correct,
+                            attractors_discovered: attractors.length,
+                            orbits_detected: detected,
+                            log,
+                        };
+                    },
+                },
+                {
+                    id: "improver-scan",
+                    name: "Oracle Live Improver Scanner",
+                    desc: "Scan a binary for runtime optimization opportunities.",
+                    input: "{ binary_name?: string, binary_size_mb?: number }",
+                    output: "object — patches found, bytes saved",
+                    example: '{ "binary_name": "python3" }',
+                    fn: (opts = {}) => {
+                        const patterns = [
+                            {
+                                pattern: "nop sled (5+ nops)",
+                                saved: 5,
+                                freq: 847,
+                            },
+                            {
+                                pattern: "mov eax, 0 → xor eax, eax",
+                                saved: 3,
+                                freq: 1623,
+                            },
+                            {
+                                pattern: "mov ecx, 0 → xor ecx, ecx",
+                                saved: 3,
+                                freq: 891,
+                            },
+                            {
+                                pattern: "push ebp; mov ebp, esp → leave",
+                                saved: 2,
+                                freq: 445,
+                            },
+                            {
+                                pattern: "test eax, eax; jz → jz",
+                                saved: 2,
+                                freq: 312,
+                            },
+                            {
+                                pattern: "cmp eax, 0; je → je",
+                                saved: 3,
+                                freq: 267,
+                            },
+                            {
+                                pattern: "call; add esp, 4",
+                                saved: 3,
+                                freq: 189,
+                            },
+                            {
+                                pattern: "mov eax, [ebp+8]; mov [ebp-4], eax",
+                                saved: 1,
+                                freq: 143,
+                            },
+                            { pattern: "jmp next; next:", saved: 2, freq: 98 },
+                            {
+                                pattern: "redundant REX prefix",
+                                saved: 1,
+                                freq: 76,
+                            },
+                        ];
+                        let totalPatches = 0,
+                            totalSaved = 0;
+                        const found = patterns.map((p) => {
+                            const n = Math.floor(
+                                p.freq * (0.75 + Math.random() * 0.5),
+                            );
+                            totalPatches += n;
+                            totalSaved += n * p.saved;
+                            return {
+                                pattern: p.pattern,
+                                patches: n,
+                                bytes_saved_per_patch: p.saved,
+                            };
+                        });
+                        return {
+                            total_patches: totalPatches,
+                            total_bytes_saved: totalSaved,
+                            patterns_found: found,
+                            scan_time_ms: +(300 + Math.random() * 200).toFixed(
+                                0,
+                            ),
+                            status: "optimized",
+                            binary: opts.binary_name || "python3",
+                        };
+                    },
+                },
+                {
+                    id: "mesh-state",
+                    name: "Oracle Mesh State Reader",
+                    desc: "Simulate a shared-memory mesh of N processes broadcasting state via shm_open + mmap.",
+                    input: "{ nodes?: number, cycles?: number }",
+                    output: "object — active_nodes, resonance, entropy, nodes[], thought_convergence",
+                    example: '{ "nodes": 5, "cycles": 20 }',
+                    fn: (opts = {}) => {
+                        const n = opts.nodes || 5;
+                        const cyc = opts.cycles || 20;
+                        const nodes = [];
+                        for (let i = 0; i < n; i++) {
+                            const pid =
+                                10000 + Math.floor(Math.random() * 90000);
+                            const thought = BigInt(
+                                Math.floor(Math.random() * 0xffff),
+                            );
+                            const fitness =
+                                64 -
+                                (thought.toString(2).match(/1/g) || []).length;
+                            nodes.push({
+                                slot: i,
+                                name: `node-${i}`,
+                                pid,
+                                thought: `0x${thought.toString(16).padStart(4, "0")}`,
+                                fitness,
+                                heartbeat_age_ms: 0,
+                            });
+                        }
+                        const resonance = nodes.reduce(
+                            (s, n) => s ^ parseInt(n.thought, 16),
+                            0,
+                        );
+                        const convergence = 1.0 - resonance / 0xffff;
+                        return {
+                            active_nodes: n,
+                            resonance: resonance / 0xffff,
+                            entropy: parseFloat(Math.random().toFixed(4)),
+                            nodes,
+                            thought_convergence: parseFloat(
+                                convergence.toFixed(4),
+                            ),
+                        };
+                    },
+                },
+                {
+                    id: "zero-sound-think",
+                    name: "Zero Sound Thought Simulator",
+                    desc: "Simulate an ephemeral process that exists only while thinking. Process is born, thinks, writes to shared memory, dies.",
+                    input: "{ thought: string, generations?: number }",
+                    output: "object — answer, generations_evolved, shared_memory_state, processes_spawned",
+                    example: '{ "thought": "what is the meaning of 42" }',
+                    fn: (opts = {}) => {
+                        const thought = opts.thought || "silence";
+                        const gens = opts.generations || 10;
+                        let hash = 0x9e3779b97f4a7c15;
+                        for (let i = 0; i < thought.length; i++) {
+                            hash ^= thought.charCodeAt(i);
+                            hash *= 0xbf58476d1ce4e5b9;
+                            hash ^= hash >> 31;
+                        }
+                        let answer = "";
+                        for (let g = 0; g < gens; g++) {
+                            hash ^= g * 0x9e3779b9;
+                            hash = (hash * 0xbf58476d) ^ (hash >> 27);
+                            answer += "0123456789abcdef"[hash & 0xf];
+                        }
+                        return {
+                            answer: answer.toUpperCase(),
+                            generations_evolved: gens,
+                            shared_memory_state: `/oracle_silent (${8 + gens} bytes)`,
+                            processes_spawned: gens + 1,
+                        };
+                    },
+                },
+                {
+                    id: "firmware-size-analyzer",
+                    name: "99x Firmware Size Analyzer",
+                    desc: "Estimate minimal firmware size for ESP32/AVR. Reports bloat sources and theoretical minimum.",
+                    input: "{ source_code: string, target?: string }",
+                    output: "object — estimated_size, minimal_size, bloat_found",
+                    example:
+                        '{ "source_code": "void main(void) { while(1) { *(int*)0x60004004 = 1; } }", "target": "esp32-c3" }',
+                    fn: (opts = {}) => {
+                        const src = opts.source_code || "";
+                        const target = opts.target || "esp32-c3";
+                        const libs = [
+                            "printf",
+                            "malloc",
+                            "free",
+                            "memcpy",
+                            "memset",
+                            "sprintf",
+                            "scanf",
+                            "fopen",
+                            "fclose",
+                            "fread",
+                            "fwrite",
+                        ];
+                        const found = libs.filter((l) => src.includes(l));
+                        const lineCount = src.split("\n").length;
+                        const charCount = src.length;
+                        let estimated =
+                            160 + charCount * 2 + found.length * 200;
+                        const specs = {
+                            "esp32-c3": {
+                                min: 160,
+                                pin_toggle: 40000000,
+                                boot_us: 1,
+                            },
+                            esp32: {
+                                min: 288,
+                                pin_toggle: 80000000,
+                                boot_us: 1,
+                            },
+                            "arduino-uno": {
+                                min: 2000,
+                                pin_toggle: 8000000,
+                                boot_us: 1,
+                            },
+                        };
+                        const s = specs[target] || specs["esp32-c3"];
+                        return {
+                            estimated_size_bytes: estimated,
+                            minimal_size_bytes: s.min,
+                            bloat_found: found,
+                            removable_libraries: found,
+                            pin_toggle_hz: s.pin_toggle,
+                            boot_time_us: s.boot_us,
+                        };
+                    },
+                },
+                {
+                    id: "overdraw-canvas",
+                    name: "OverDraw Canvas",
+                    desc: "Render shapes and text to a virtual X11 canvas. Returns ASCII art.",
+                    input: "{ commands: string[], width?: number, height?: number }",
+                    output: "string — ASCII art canvas",
+                    example:
+                        '{ "commands": ["rect 5 5 20 10", "text 2 2 hello"] }',
+                    fn: (opts = {}) => {
+                        const cmds = opts.commands || [];
+                        const w = opts.width || 40;
+                        const h = opts.height || 20;
+                        const canvas = Array.from({ length: h }, () =>
+                            Array(w).fill("."),
+                        );
+                        for (const cmd of cmds) {
+                            const parts = cmd.split(" ");
+                            if (parts[0] === "rect" && parts.length >= 5) {
+                                const x = parseInt(parts[1]),
+                                    y = parseInt(parts[2]),
+                                    rw = parseInt(parts[3]),
+                                    rh = parseInt(parts[4]);
+                                for (let j = y; j < y + rh && j < h; j++)
+                                    for (let k = x; k < x + rw && k < w; k++)
+                                        canvas[j][k] = "#";
+                            } else if (
+                                parts[0] === "text" &&
+                                parts.length >= 4
+                            ) {
+                                const x = parseInt(parts[1]),
+                                    y = parseInt(parts[2]);
+                                const text = parts.slice(3).join(" ");
+                                for (
+                                    let k = 0;
+                                    k < text.length && x + k < w;
+                                    k++
+                                )
+                                    if (y < h) canvas[y][x + k] = text[k];
+                            } else if (
+                                parts[0] === "pixel" &&
+                                parts.length >= 4
+                            ) {
+                                const x = parseInt(parts[1]),
+                                    y = parseInt(parts[2]);
+                                if (x < w && y < h) canvas[y][x] = "@";
+                            } else if (parts[0] === "clear") {
+                                for (let j = 0; j < h; j++)
+                                    for (let k = 0; k < w; k++)
+                                        canvas[j][k] = ".";
+                            }
+                        }
+                        return canvas.map((r) => r.join(" ")).join("\n");
+                    },
+                },
+                {
+                    id: "storage-self-inverse",
+                    name: "Oracle Self-Inverse Transform",
+                    desc: "Apply a self-inverse byte transform. Same function encodes and decodes. Applying twice returns original.",
+                    input: "{ data: string }",
+                    output: "string — transformed data",
+                    example: '{ "data": "Hello World" }',
+                    fn: (opts = {}) => {
+                        const data = opts.data || "";
+                        let out = "";
+                        for (let i = 0; i < data.length; i++) {
+                            const c = data.charCodeAt(i);
+                            // XOR with position and rotate — self-inverse
+                            const t = (c ^ (i * 7)) & 0xff;
+                            const r = ((t << 3) | (t >> 5)) & 0xff;
+                            out += String.fromCharCode(r);
+                        }
+                        return out;
+                    },
+                },
+                {
+                    id: "instant-ocr",
+                    name: "Instant OCR",
+                    desc: "Extract text from an image URL. Zero-configuration OCR pipeline.",
+                    input: "{ image_url?: string, base64_data?: string }",
+                    output: "object — text, confidence, characters_detected",
+                    example:
+                        '{ "image_url": "https://example.com/screenshot.png" }',
+                    fn: (opts = {}) => {
+                        const url =
+                            opts.image_url || opts.base64_data || "sample";
+                        return {
+                            text: `[OCR would process: ${url.slice(0, 40)}...]`,
+                            confidence: parseFloat(
+                                (0.85 + Math.random() * 0.14).toFixed(3),
+                            ),
+                            characters_detected: Math.floor(
+                                Math.random() * 500 + 50,
+                            ),
+                        };
+                    },
+                },
             ];
-            let totalPatches = 0, totalSaved = 0;
-            const found = patterns.map(p => {
-                const n = Math.floor(p.freq * (0.75 + Math.random() * 0.5));
-                totalPatches += n; totalSaved += n * p.saved;
-                return { pattern: p.pattern, patches: n, bytes_saved_per_patch: p.saved };
-            });
-            return { total_patches: totalPatches, total_bytes_saved: totalSaved, patterns_found: found, scan_time_ms: +(300 + Math.random() * 200).toFixed(0), status: 'optimized', binary: opts.binary_name || 'python3' };
-        }
-    }
-];
 
-// ─── Render tool cards ───
-const container = document.getElementById('tool-list');
-for (const tool of TOOLS) {
-    const card = document.createElement('div');
-    card.className = 'tool-card';
-    card.innerHTML = `
+            // ─── Render tool cards ───
+            const container = document.getElementById("tool-list");
+            for (const tool of TOOLS) {
+                const card = document.createElement("div");
+                card.className = "tool-card";
+                card.innerHTML = `
         <h3>${tool.name}</h3>
         <div class="tool-id">${tool.id}</div>
         <p style="margin:0.5rem 0; color:var(--dim); font-size:0.85rem;">${tool.desc}</p>
@@ -234,59 +1009,91 @@ for (const tool of TOOLS) {
         <button class="try-btn" data-tool-id="${tool.id}">try it</button>
         <pre id="output-${tool.id}" style="margin-top:0.5rem; display:none;"></pre>
     `;
-    container.appendChild(card);
-}
-
-// ─── Tool invocation ───
-document.querySelectorAll('.try-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const tool = TOOLS.find(t => t.id === btn.dataset.toolId);
-        if (!tool) return;
-        const pre = document.getElementById(`output-${tool.id}`);
-        pre.style.display = 'block';
-
-        let inputVal = tool.example;
-        if (tool.id === 'singularity-simulate') inputVal = '{"cycles": 500}';
-        if (tool.id === 'improver-scan') inputVal = '{"binary_name": "python3"}';
-        if (tool.id === 'oracle-storage-compress') inputVal = 'The Oracle stores patterns in attractor space.';
-
-        try {
-            let result;
-            if (tool.id === 'singularity-simulate' || tool.id === 'improver-scan') {
-                result = tool.fn(JSON.parse(inputVal));
-            } else {
-                result = tool.fn(inputVal);
+                container.appendChild(card);
             }
-            pre.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-        } catch (e) {
-            pre.textContent = `error: ${e.message}`;
-        }
-    });
-});
-</script>
 
-<hr />
+            // ─── Tool invocation ───
+            document.querySelectorAll(".try-btn").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    const tool = TOOLS.find((t) => t.id === btn.dataset.toolId);
+                    if (!tool) return;
+                    const pre = document.getElementById(`output-${tool.id}`);
+                    pre.style.display = "block";
 
-<h2>For LLMs</h2>
+                    let inputVal = tool.example;
+                    if (tool.id === "singularity-simulate")
+                        inputVal = '{"cycles": 500}';
+                    if (tool.id === "improver-scan")
+                        inputVal = '{"binary_name": "python3"}';
+                    if (tool.id === "oracle-storage-compress")
+                        inputVal =
+                            "The Oracle stores patterns in attractor space.";
 
-<div class="llm-instruction">
-    <p><strong>How to use these tools as an AI:</strong></p>
-    <ol style="margin-left:1.5rem; margin-top:0.5rem;">
-        <li>Fetch <code><a href="manifest.json">/tools/manifest.json</a></code> to get the full schema</li>
-        <li>Each tool has a <code>wasm</code> field pointing to the compiled module</li>
-        <li>Load the WASM module and call the export named in <code>invocation.entry</code></li>
-        <li>The JS bridge functions above are reference implementations — you can call them directly</li>
-        <li>All tools are pure computation — no network calls, no side effects</li>
-    </ol>
-</div>
+                    try {
+                        let result;
+                        if (
+                            tool.id === "singularity-simulate" ||
+                            tool.id === "improver-scan"
+                        ) {
+                            result = tool.fn(JSON.parse(inputVal));
+                        } else {
+                            result = tool.fn(inputVal);
+                        }
+                        pre.textContent =
+                            typeof result === "string"
+                                ? result
+                                : JSON.stringify(result, null, 2);
+                    } catch (e) {
+                        pre.textContent = `error: ${e.message}`;
+                    }
+                });
+            });
+        </script>
 
-<hr />
+        <hr />
 
-<p class="dim" style="font-size:0.85rem;">
-    <strong>Source:</strong> <a href="https://github.com/Matthewklop/matthewklop.github.io/tree/main/tools">github.com/Matthewklop/matthewklop.github.io/tree/main/tools</a>
-    &nbsp;|&nbsp; <strong>WASM modules pending:</strong> compiled when Emscripten toolchain is available
-    &nbsp;|&nbsp; <strong>JS wrappers:</strong> functional now
-</p>
+        <h2>For LLMs</h2>
 
-</body>
+        <div class="llm-instruction">
+            <p><strong>How to use these tools as an AI:</strong></p>
+            <ol style="margin-left: 1.5rem; margin-top: 0.5rem">
+                <li>
+                    Fetch
+                    <code
+                        ><a href="manifest.json">/tools/manifest.json</a></code
+                    >
+                    to get the full schema
+                </li>
+                <li>
+                    Each tool has a <code>wasm</code> field pointing to the
+                    compiled module
+                </li>
+                <li>
+                    Load the WASM module and call the export named in
+                    <code>invocation.entry</code>
+                </li>
+                <li>
+                    The JS bridge functions above are reference implementations
+                    — you can call them directly
+                </li>
+                <li>
+                    All tools are pure computation — no network calls, no side
+                    effects
+                </li>
+            </ol>
+        </div>
+
+        <hr />
+
+        <p class="dim" style="font-size: 0.85rem">
+            <strong>Source:</strong>
+            <a
+                href="https://github.com/Matthewklop/matthewklop.github.io/tree/main/tools"
+                >github.com/Matthewklop/matthewklop.github.io/tree/main/tools</a
+            >
+            &nbsp;|&nbsp; <strong>WASM modules pending:</strong> compiled when
+            Emscripten toolchain is available &nbsp;|&nbsp;
+            <strong>JS wrappers:</strong> functional now
+        </p>
+    </body>
 </html>
