@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Matthewklop Tool Manifest",
+  "description": "Machine-readable manifest of WASM tools available for LLM use. An LLM can parse this file to discover tools, understand their interfaces, and invoke them.",
+  "version": "1.0.0",
+  "author": "Matthew Klopfenstein (matthewklop)",
+  "base_url": "https://matthewklop.github.io/tools",
+  "tools": [
+    {
+      "id": "stone-compile",
+      "name": "Stone Compiler",
+      "description": "Compile Stone source code to C. Stone is a stack-based language designed for LLM token throughput. Every token is ≤16 characters, no AST construction needed.",
+      "wasm": "wasm/stone.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "stoneCompile",
+        "input_type": "string",
+        "output_type": "string"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Stone source code to compile"
+          }
+        },
+        "required": ["source"]
+      },
+      "returns": {
+        "type": "string",
+        "description": "Generated C source code"
+      },
+      "example_input": "fn fib n\n  if n < 2\n    ret n\n  end\n  ret fib(n - 1) + fib(n - 2)\nend\n\nfn main\n  printn fib(10)\nend",
+      "grammar": {
+        "tokens_max_length": 16,
+        "keywords": ["fn", "end", "var", "if", "else", "loop", "print", "printn", "ret", "and", "or"],
+        "operators": ["+", "-", "*", "/", ">", "<", "=", "&", "|"],
+        "separator": "newline",
+        "comment": "# to end of line"
+      },
+      "tags": ["compiler", "language", "c", "transpiler"]
+    },
+    {
+      "id": "oracle-circuit",
+      "name": "Oracle Circuit Designer",
+      "description": "Given an English circuit description, returns transistor count, gate count, propagation delay at 14nm, and truth table.",
+      "wasm": "wasm/oracle-circuit.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "designCircuit",
+        "input_type": "string",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "English description of the circuit (e.g. 'half adder', 'D flip-flop', '3-input NAND')"
+          }
+        },
+        "required": ["description"]
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "gates": { "type": "integer" },
+          "transistors": { "type": "integer" },
+          "delay_ps": { "type": "number" },
+          "schematic": { "type": "array", "items": { "type": "string" } },
+          "truth_table": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "known_circuits": ["half adder", "full adder", "4-bit adder", "32-bit adder", "D flip-flop", "4-bit register", "3-input NAND"],
+      "tags": ["circuit", "silicon", "hardware", "reference"]
+    },
+    {
+      "id": "oracle-storage-compress",
+      "name": "Oracle Storage Compressor",
+      "description": "Compress text using attractor-based sub-Shannon compression. Returns attractor trajectory and compression ratio relative to Shannon limit.",
+      "wasm": "wasm/oracle-storage.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "compress",
+        "input_type": "string",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to compress"
+          }
+        },
+        "required": ["text"]
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "original_bytes": { "type": "integer" },
+          "compressed_bytes": { "type": "integer" },
+          "shannon_limit_bytes": { "type": "number" },
+          "improvement_percent": { "type": "number" },
+          "trajectory": { "type": "string" },
+          "patterns_matched": { "type": "integer" },
+          "patterns_learned": { "type": "integer" }
+        }
+      },
+      "tags": ["compression", "shannon", "attractor", "storage"]
+    },
+    {
+      "id": "singularity-simulate",
+      "name": "Singularity Simulator",
+      "description": "Run the 4-agent attractor prediction simulation. Each agent follows a deterministic orbit and converges to ~94% prediction accuracy using n-gram learning.",
+      "wasm": "wasm/singularity.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "runSingularity",
+        "input_type": "object",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cycles": {
+            "type": "integer",
+            "description": "Number of simulation cycles to run (default 2000)",
+            "default": 2000
+          },
+          "agents": {
+            "type": "integer",
+            "description": "Number of agents (default 4)",
+            "default": 4
+          }
+        }
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "final_accuracy": { "type": "number" },
+          "total_predictions": { "type": "integer" },
+          "correct_predictions": { "type": "integer" },
+          "attractors_discovered": { "type": "integer" },
+          "orbits_detected": { "type": "integer" },
+          "log": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "tags": ["singularity", "attractor", "prediction", "mesh"]
+    },
+    {
+      "id": "improver-scan",
+      "name": "Oracle Live Improver Scanner",
+      "description": "Simulate scanning a binary for runtime code optimization opportunities. Returns patterns found, patches applied, and bytes saved.",
+      "wasm": "wasm/oracle-improver.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "scanBinary",
+        "input_type": "object",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "binary_name": {
+            "type": "string",
+            "description": "Name of the binary to scan (e.g. 'python3')",
+            "default": "python3"
+          },
+          "binary_size_mb": {
+            "type": "number",
+            "description": "Size of the binary in MB",
+            "default": 4.2
+          }
+        }
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "total_patches": { "type": "integer" },
+          "total_bytes_saved": { "type": "integer" },
+          "patterns_found": { "type": "array", "items": { "type": "object" } },
+          "scan_time_ms": { "type": "number" },
+          "status": { "type": "string" }
+        }
+      },
+      "tags": ["optimizer", "runtime", "x86", "ptrace"]
+    }
+  ]
+}
