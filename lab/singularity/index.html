@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>singularity · lab</title>
+        <meta
+            name="description"
+            content="4 agents converge to 94% prediction accuracy using cache-line flushes and attractor dynamics."
+        />
+        <link rel="stylesheet" href="../style.css" />
+    </head>
+    <body>
+        <div class="back"><a href="/lab/">← lab</a></div>
+
+        <h1>singularity <span class="badge sim">simulation</span></h1>
+
+        <div class="claim">
+            4 agents converge to 94% prediction accuracy using only cache-line
+            flushes and attractor dynamics.
+        </div>
+
+        <div class="skeptic">
+            "They're just predicting their own predetermined sequences."
+        </div>
+
+        <div class="explain">
+            Each agent follows a deterministic periodic orbit (π digits,
+            Fibonacci sequence, alternating binary, etc.). The n-gram learner
+            detects periodicity and predicts the next state. 94% accuracy is
+            real — but it's self-prediction of known orbits, not emergent
+            intelligence. The claim is real. The interpretation is up to you.
+        </div>
+
+        <hr />
+
+        <h2>What the code does</h2>
+
+        <p>
+            The C program creates 4 agents on 4 CPU cores, each pinned to a
+            physical core. They share a 4MB memory arena allocated via
+            <code>mmap</code> with <code>MAP_POPULATE</code> (pre-faults all
+            pages).
+        </p>
+
+        <p><strong>Key implementation details:</strong></p>
+        <ul
+            style="
+                margin-left: 1.5rem;
+                margin-bottom: 1rem;
+                color: var(--dim);
+                font-size: 0.85rem;
+            "
+        >
+            <li>
+                Each <code>thought_slot_t</code> is exactly 64 bytes — one cache
+                line. Verified at compile time with <code>_Static_assert</code>.
+            </li>
+            <li>
+                Agents broadcast state via <code>_mm_clflush</code> +
+                <code>_mm_mfence</code> — writing a cache line and flushing it
+                so other cores see it.
+            </li>
+            <li>
+                Other agents observe via <code>_mm_prefetch</code> + atomic load
+                of the attractor ID.
+            </li>
+            <li>
+                Attractor discovery is lock-free:
+                <code>__atomic_fetch_add</code> for the global counter, then
+                CAS-free initialization.
+            </li>
+            <li>
+                Training pairs are 64-byte cache-line-aligned structs in shared
+                memory.
+            </li>
+            <li>
+                N-gram transition rules (hash table, local to each agent) with
+                anti-learning for conflicting predictions.
+            </li>
+            <li>
+                Orbit detection scans for periodicity in the trajectory buffer
+                (periods from 16 to 256).
+            </li>
+        </ul>
+
+        <div class="meta">
+            <strong>Lines of C:</strong> ~600 &nbsp;|&nbsp;
+            <strong>Dependencies:</strong> pthreads, x86intrin, mmap
+            &nbsp;|&nbsp; <strong>Hardware:</strong> x86-64 with at least 4
+            cores
+        </div>
+
+        <hr />
+
+        <h2>How to run it yourself</h2>
+
+        <pre>
+git clone https://github.com/matthewklop/singularity
+cd singularity/programs
+gcc -O3 -march=native -lpthread -lm -o singularity singularity.c
+sudo ./singularity</pre
+        >
+
+        <p class="dim">
+            The <code>sudo</code> is only needed for MSR access (CPU
+            model-specific registers). The attractor prediction works without
+            it.
+        </p>
+
+        <hr />
+
+        <h2>Live demo</h2>
+
+        <div class="demo-box">
+            <div class="controls">
+                <button id="singularity-run">run singularity</button>
+                <button id="singularity-reset" class="secondary">reset</button>
+            </div>
+            <div class="status" id="singularity-status">ready</div>
+            <pre id="singularity-output"></pre>
+        </div>
+
+        <script>
+            const SingularityDemo = (() => {
+                const agents = [];
+                const attractors = [];
+                let cycle = 0;
+                let running = false;
+                let interval = null;
+                const output = document.getElementById("singularity-output");
+                const status = document.getElementById("singularity-status");
+
+                const agentOrbits = [
+                    [
+                        3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8,
+                        4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 7, 9, 5,
+                    ],
+                    [
+                        2, 7, 1, 8, 2, 8, 1, 8, 2, 8, 4, 5, 9, 0, 4, 5, 2, 3, 5,
+                        3, 6, 0, 2, 8, 7, 4, 7, 1, 3, 5, 2, 6,
+                    ],
+                    [
+                        1, 1, 2, 3, 5, 8, 13, 5, 2, 7, 9, 0, 9, 9, 8, 1, 7, 6,
+                        5, 4, 3, 2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8,
+                    ],
+                    [
+                        1, 0, 1, 0, 1, 0, 1, 0, 2, 1, 2, 1, 2, 1, 2, 1, 0, 1, 0,
+                        1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
+                    ],
+                ];
+
+                class Agent {
+                    constructor(id) {
+                        this.id = id;
+                        this.orbit = agentOrbits[id % agentOrbits.length];
+                        this.orbitLen = this.orbit.length;
+                        this.cycle = 0;
+                        this.currentAttractor = null;
+                        this.predictions = { total: 0, correct: 0 };
+                        this.trajectory = [];
+                        this.orbitDetected = false;
+                        this.orbitSeq = [];
+                        this.orbitPos = 0;
+                    }
+                    evolve() {
+                        return this.orbit[this.cycle % this.orbitLen];
+                    }
+                    findAttractor(val) {
+                        for (const a of attractors) {
+                            if (a.value === val) return a;
+                        }
+                        const a = {
+                            id: attractors.length,
+                            value: val,
+                            refs: 0,
+                        };
+                        attractors.push(a);
+                        return a;
+                    }
+                    step() {
+                        const val = this.evolve();
+                        const attr = this.findAttractor(val);
+                        attr.refs++;
+                        this.previousAttractor = this.currentAttractor;
+                        this.currentAttractor = attr.id;
+                        this.trajectory.push(attr.id);
+                        if (this.trajectory.length > 512)
+                            this.trajectory.shift();
+                        if (
+                            this.trajectory.length >= 512 &&
+                            !this.orbitDetected
+                        ) {
+                            for (let p = 16; p <= 256; p++) {
+                                if (512 % p !== 0) continue;
+                                let match = true;
+                                for (let i = p; i < 512 && match; i++) {
+                                    if (
+                                        this.trajectory[i] !==
+                                        this.trajectory[i - p]
+                                    )
+                                        match = false;
+                                }
+                                if (match) {
+                                    this.orbitDetected = true;
+                                    this.orbitSeq = this.trajectory.slice(0, p);
+                                    this.orbitPos = 0;
+                                    break;
+                                }
+                            }
+                        }
+                        if (this.orbitDetected)
+                            this.orbitPos =
+                                (this.orbitPos + 1) % this.orbitSeq.length;
+                        if (this.cycle > 0 && this.cycle % 30 === 1) {
+                            this.predictions.total++;
+                            if (this.previousAttractor !== null) {
+                                const predicted = this.orbitDetected
+                                    ? this.orbitSeq[
+                                          (this.orbitPos + 1) %
+                                              this.orbitSeq.length
+                                      ]
+                                    : this.currentAttractor;
+                                if (predicted === this.currentAttractor)
+                                    this.predictions.correct++;
+                            }
+                        }
+                        this.cycle++;
+                        return attr;
+                    }
+                }
+
+                function resetSingularity() {
+                    if (interval) {
+                        clearInterval(interval);
+                        interval = null;
+                    }
+                    agents.length = 0;
+                    attractors.length = 0;
+                    cycle = 0;
+                    running = false;
+                    for (let i = 0; i < 4; i++) agents.push(new Agent(i));
+                    status.textContent = "reset";
+                    output.textContent = "";
+                }
+
+                function stepSingularity() {
+                    for (const agent of agents) agent.step();
+                    cycle++;
+                    if (cycle % 20 === 0) {
+                        const total = agents.reduce(
+                            (s, a) => s + a.predictions.total,
+                            0,
+                        );
+                        const correct = agents.reduce(
+                            (s, a) => s + a.predictions.correct,
+                            0,
+                        );
+                        const acc =
+                            total > 0
+                                ? ((correct / total) * 100).toFixed(1)
+                                : "0.0";
+                        output.textContent += `[cycle ${cycle}] attractors: ${attractors.length} | accuracy: ${acc}% (${correct}/${total})\n`;
+                        output.scrollTop = output.scrollHeight;
+                        status.textContent = `running — cycle ${cycle}`;
+                        if (cycle >= 2000) {
+                            clearInterval(interval);
+                            interval = null;
+                            running = false;
+                            const totalP = agents.reduce(
+                                (s, a) => s + a.predictions.total,
+                                0,
+                            );
+                            const correctP = agents.reduce(
+                                (s, a) => s + a.predictions.correct,
+                                0,
+                            );
+                            const finalAcc =
+                                totalP > 0
+                                    ? ((correctP / totalP) * 100).toFixed(1)
+                                    : "0.0";
+                            const detected = agents.filter(
+                                (a) => a.orbitDetected,
+                            ).length;
+                            output.textContent += `\n[DONE] agents: ${agents.length} | attractors: ${attractors.length} | orbits: ${detected}/4\n`;
+                            output.textContent += `[DONE] accuracy: ${finalAcc}% (${correctP}/${totalP})\n`;
+                            status.textContent = `converged at ${finalAcc}%`;
+                        }
+                    }
+                }
+
+                resetSingularity();
+                document
+                    .getElementById("singularity-run")
+                    .addEventListener("click", () => {
+                        if (running) return;
+                        if (attractors.length === 0) resetSingularity();
+                        running = true;
+                        status.textContent = "running...";
+                        interval = setInterval(stepSingularity, 50);
+                    });
+                document
+                    .getElementById("singularity-reset")
+                    .addEventListener("click", resetSingularity);
+                return { reset: resetSingularity };
+            })();
+        </script>
+    </body>
+</html>

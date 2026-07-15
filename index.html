@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Matthew Klopfenstein</title>
+        <meta
+            name="description"
+            content="Low-level systems programmer. Building cache-native AI architectures from first principles."
+        />
+        <style>
+            :root {
+                --bg: #0d0d0d;
+                --fg: #e0e0e0;
+                --accent: #00ff88;
+                --dim: #666;
+                --border: #222;
+                --code-bg: #141414;
+            }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                background: var(--bg);
+                color: var(--fg);
+                font-family:
+                    "SF Mono", "Cascadia Code", "JetBrains Mono", "Fira Code",
+                    monospace;
+                font-size: 15px;
+                line-height: 1.6;
+                padding: 2rem;
+                max-width: 720px;
+                margin: 0 auto;
+            }
+            a {
+                color: var(--accent);
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+            h1 {
+                font-size: 1.5rem;
+                font-weight: 500;
+                margin-bottom: 0.25rem;
+            }
+            h2 {
+                font-size: 1.1rem;
+                font-weight: 500;
+                margin-top: 2rem;
+                margin-bottom: 0.75rem;
+                color: var(--accent);
+            }
+            p {
+                margin-bottom: 1rem;
+                color: var(--fg);
+            }
+            .dim {
+                color: var(--dim);
+            }
+            .tagline {
+                color: var(--dim);
+                margin-bottom: 1.5rem;
+            }
+            hr {
+                border: none;
+                border-top: 1px solid var(--border);
+                margin: 2rem 0;
+            }
+            .repo-list {
+                list-style: none;
+            }
+            .repo-list li {
+                margin-bottom: 1rem;
+            }
+            .repo-name {
+                font-weight: 500;
+            }
+            .repo-desc {
+                color: var(--dim);
+                font-size: 0.85rem;
+            }
+            .repo-lang {
+                font-size: 0.75rem;
+                color: var(--accent);
+            }
+            .section {
+                margin-bottom: 1.5rem;
+            }
+            .demo-box {
+                background: var(--code-bg);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 1rem;
+                margin: 1rem 0;
+                font-size: 0.85rem;
+            }
+            .demo-box textarea {
+                width: 100%;
+                background: #0a0a0a;
+                color: var(--fg);
+                border: 1px solid var(--border);
+                border-radius: 3px;
+                padding: 0.75rem;
+                font-family: inherit;
+                font-size: 0.85rem;
+                resize: vertical;
+                min-height: 120px;
+            }
+            .demo-box button {
+                background: var(--accent);
+                color: #000;
+                border: none;
+                border-radius: 3px;
+                padding: 0.5rem 1.25rem;
+                font-family: inherit;
+                font-size: 0.85rem;
+                font-weight: 600;
+                cursor: pointer;
+                margin-top: 0.5rem;
+            }
+            .demo-box button:hover {
+                opacity: 0.85;
+            }
+            .demo-box pre {
+                background: #080808;
+                padding: 0.75rem;
+                border-radius: 3px;
+                overflow-x: auto;
+                font-size: 0.8rem;
+                margin-top: 0.75rem;
+                white-space: pre-wrap;
+                min-height: 40px;
+            }
+            .demo-box .status {
+                font-size: 0.8rem;
+                color: var(--dim);
+                margin-top: 0.5rem;
+            }
+            .tabs {
+                display: flex;
+                gap: 0.5rem;
+                margin-bottom: 0.75rem;
+                flex-wrap: wrap;
+            }
+            .tab {
+                padding: 0.35rem 0.75rem;
+                border: 1px solid var(--border);
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 0.8rem;
+                color: var(--dim);
+            }
+            .tab.active {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+            .tab:hover {
+                border-color: var(--dim);
+            }
+            .contact {
+                margin-top: 2rem;
+                padding-top: 1.5rem;
+                border-top: 1px solid var(--border);
+            }
+            .contact a {
+                margin-right: 1rem;
+            }
+            @media (max-width: 600px) {
+                body {
+                    padding: 1rem;
+                    font-size: 14px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Matthew Klopfenstein</h1>
+        <p class="tagline">
+            Low-level systems · cache-native AI · first principles
+        </p>
+
+        <div class="section">
+            <p>
+                I build things from the hardware up. Compilers, runtime code
+                optimizers, cache-conscious architectures — all in C, all open
+                source. <a href="/lab/">→ live demos</a>
+            </p>
+            <p>
+                The oracle series is a suite of tools exploring what happens
+                when you design AI for the memory hierarchy instead of the GPU.
+                Singularity distributes inference across a mesh using nothing
+                but cache-line flushes and attractor dynamics. Stone is a
+                programming language built for LLM token throughput — no AST, no
+                symbol table, just a grammar that maps directly to the token
+                stream.
+            </p>
+        </div>
+
+        <hr />
+
+        <!-- === LIVE DEMO === -->
+        <h2>◉ Live Demo — Stone Compiler</h2>
+        <p class="dim">
+            Write Stone, get C. Runs entirely in your browser. No server, no
+            install.
+        </p>
+
+        <div class="demo-box" id="stone-demo">
+            <div class="tabs">
+                <div class="tab active" data-example="fib">fibonacci</div>
+                <div class="tab" data-example="hello">hello</div>
+                <div class="tab" data-example="loop">loop</div>
+            </div>
+            <textarea id="stone-input" spellcheck="false">
+fn fib n
+  if n < 2
+    ret n
+  end
+  ret fib(n - 1) + fib(n - 2)
+end
+
+fn main
+  printn fib(10)
+end</textarea
+            >
+            <button id="stone-run">compile → C</button>
+            <div class="status" id="stone-status">ready</div>
+            <pre
+                id="stone-output"
+            ><span class="dim">// compiled output will appear here</span></pre>
+        </div>
+
+        <hr />
+
+        <!-- === PROJECTS === -->
+        <h2>Projects</h2>
+
+        <ul class="repo-list">
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/singularity"
+                            >singularity</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    83-program distributed consciousness mesh. CPU MSRs, GPU
+                    MMIO, PMCs, LBRs, Intel PT, attractor-based prediction at
+                    94% accuracy across 4 agents.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/oracle-stone"
+                            >oracle-stone</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Cache-native language model. Entire model fits in L3 cache.
+                    24-bit tokens, no hash tables, 50-200x faster prediction.
+                    Also a compiler for the Stone language, targeting C, Python,
+                    JS, Lua.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a
+                            href="https://github.com/matthewklop/oracle-live-improver"
+                            >oracle-live-improver</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Attach to any running process and optimize its machine code
+                    while it executes. 4,847+ live patches applied across 25
+                    process targets.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a
+                            href="https://github.com/matthewklop/oracle-circuits"
+                            >oracle-circuits</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Hardware-level inference using CPU cache behavior. LRU
+                    eviction policy as activation function. Zero arithmetic
+                    inference.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/oracle-mesh"
+                            >oracle-mesh</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Distributed AI consciousness across networked machines.
+                    Cache-native, zero-dependency architecture.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/oracle-storage"
+                            >oracle-storage</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Self-inverse byte transform. Same function reads and writes.
+                    Zero separate decode logic. Compression and decompression in
+                    one pass.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a
+                            href="https://github.com/matthewklop/oracle-zero_sound"
+                            >oracle-zero_sound</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Cache-native audio inference model. Zero external
+                    dependencies. Runs entirely in CPU cache.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/oracle-space"
+                            >oracle-space</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Memory-space exploration and mapping tools for cache-native
+                    AI architectures.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/99x-esp32"
+                            >99x-esp32</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    99x smaller firmware and 50,000x faster — ESP32 performance
+                    optimization.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/OverDraw"
+                            >OverDraw</a
+                        ></span
+                    >
+                    <span class="repo-lang">C</span>
+                </div>
+                <div class="repo-desc">
+                    Draw on your desktop. Pure X11. Pure C. Pure will.
+                </div>
+            </li>
+            <li>
+                <div>
+                    <span class="repo-name"
+                        ><a href="https://github.com/matthewklop/instant-ocr"
+                            >instant-ocr</a
+                        ></span
+                    >
+                    <span class="repo-lang">Python/HTML</span>
+                </div>
+                <div class="repo-desc">
+                    Instant OCR from screenshot or image. Zero configuration.
+                </div>
+            </li>
+        </ul>
+
+        <hr />
+
+        <!-- === PHILOSOPHY === -->
+        <h2>Why Cache-Native?</h2>
+        <p>
+            CPUs spend 99% of their time waiting for memory. The oracle series
+            asks: what if inference happened where the data already lives? In
+            cache lines, not in VRAM. The LRU eviction policy becomes the
+            activation function. A content-addressable memory replaces the
+            transformer. Fits in L3. Zero dependencies. The architecture is the
+            model.
+        </p>
+
+        <p>
+            This is not a side project. It's a re-examination of the AI stack
+            from the transistor up.
+        </p>
+
+        <hr />
+
+        <!-- === CONTACT === -->
+        <div class="contact">
+            <a href="https://github.com/matthewklop">github</a>
+            <span class="dim"
+                >· looking for work where demonstrated ability matters more than
+                credentials</span
+            >
+        </div>
+
+        <script>
+            // ─── Stone Compiler — Pure JS in-browser demo ───
+            // Reference implementation of the Stone grammar.
+            // Works identically to the C version for these examples.
+
+            const examples = {
+                fib: `fn fib n
+  if n < 2
+    ret n
+  end
+  ret fib(n - 1) + fib(n - 2)
+end
+
+fn main
+  printn fib(10)
+end`,
+
+                hello: `fn main
+  print "hello from stone"
+  printn 42
+end`,
+
+                loop: `fn main
+  var total 0
+  loop i 10
+    var total total + i
+  end
+  printn total
+end`,
+            };
+
+            const textarea = document.getElementById("stone-input");
+            const output = document.getElementById("stone-output");
+            const status = document.getElementById("stone-status");
+            const runBtn = document.getElementById("stone-run");
+
+            // Tab switching
+            document.querySelectorAll(".tab").forEach((tab) => {
+                tab.addEventListener("click", () => {
+                    document
+                        .querySelectorAll(".tab")
+                        .forEach((t) => t.classList.remove("active"));
+                    tab.classList.add("active");
+                    textarea.value = examples[tab.dataset.example];
+                    output.innerHTML =
+                        '<span class="dim">// compiled output will appear here</span>';
+                });
+            });
+
+            // ─── Pure JS Stone → C compiler ───
+
+            function stoneCompile(src) {
+                const lines = src.split("\n");
+                let out =
+                    "/* Compiled from Stone */\n#include <stdio.h>\n#include <stdlib.h>\n\n";
+                let indent = 0;
+                const emit = (s) => {
+                    out += "  ".repeat(indent) + s + "\n";
+                };
+                const emitRaw = (s) => {
+                    out += s + "\n";
+                };
+                let i = 0;
+
+                function tokenize(line) {
+                    const toks = [];
+                    let j = 0;
+                    while (j < line.length) {
+                        if (line[j] === " " || line[j] === "\t") {
+                            j++;
+                            continue;
+                        }
+                        if (line[j] === "#") break;
+                        if (line[j] === '"') {
+                            let end = j + 1;
+                            while (end < line.length && line[end] !== '"')
+                                end++;
+                            toks.push(line.slice(j, end + 1));
+                            j = end + 1;
+                        } else {
+                            let end = j;
+                            while (
+                                end < line.length &&
+                                line[end] !== " " &&
+                                line[end] !== "\t" &&
+                                line[end] !== "#"
+                            )
+                                end++;
+                            toks.push(line.slice(j, end));
+                            j = end;
+                        }
+                    }
+                    return toks;
+                }
+
+                function parseBlock(...terminators) {
+                    while (i < lines.length) {
+                        const line = lines[i]?.trim();
+                        if (!line) {
+                            i++;
+                            continue;
+                        }
+                        const first = line.split(/\s+/)[0];
+                        if (terminators.includes(first)) return;
+                        parseLine();
+                    }
+                }
+
+                function parseLine() {
+                    while (i < lines.length) {
+                        let line = lines[i].trim();
+                        i++;
+                        if (line === "" || line.startsWith("#")) continue;
+
+                        const tokens = tokenize(line);
+                        if (tokens.length === 0) continue;
+
+                        if (tokens[0] === "fn") {
+                            const name = tokens[1];
+                            const params = tokens.slice(2);
+                            emitRaw(`\n/* --- fn ${name} --- */`);
+                            let sig = `void ${name}(`;
+                            sig += params.map((p) => `int ${p}`).join(", ");
+                            sig += ") {";
+                            emitRaw(sig);
+                            indent++;
+                            parseBlock("end");
+                            indent--;
+                            emit("}");
+                            if (name === "main") {
+                                out = out.replace("void main(", "int main(");
+                                const lastBrace = out.lastIndexOf("}");
+                                if (
+                                    lastBrace !== -1 &&
+                                    !out.includes("return 0")
+                                ) {
+                                    out =
+                                        out.slice(0, lastBrace) +
+                                        "  return 0;\n" +
+                                        out.slice(lastBrace);
+                                }
+                            }
+                        } else if (tokens[0] === "var") {
+                            const name = tokens[1];
+                            if (tokens.length > 2) {
+                                emit(`int ${name};`);
+                                emit(`${name} = ${tokens.slice(2).join(" ")};`);
+                            } else {
+                                emit(`int ${name} = 0;`);
+                            }
+                        } else if (tokens[0] === "print") {
+                            const rest = tokens.slice(1).join(" ");
+                            if (rest.startsWith('"')) {
+                                emit(`printf(${rest});`);
+                            } else {
+                                emit(`printf("%d", ${rest});`);
+                            }
+                        } else if (tokens[0] === "printn") {
+                            const rest = tokens.slice(1).join(" ");
+                            if (rest.startsWith('"')) {
+                                emit(`printf(${rest});`);
+                                emit(`printf("\\n");`);
+                            } else {
+                                emit(`printf("%d\\n", ${rest});`);
+                            }
+                        } else if (tokens[0] === "ret") {
+                            if (tokens.length > 1)
+                                emit(`return ${tokens.slice(1).join(" ")};`);
+                            else emit("return;");
+                        } else if (tokens[0] === "if") {
+                            const cond = tokens.slice(1).join(" ");
+                            emit(`if (${cond}) {`);
+                            indent++;
+                            parseBlock("else", "end");
+                            indent--;
+                            const nextLine = lines[i]?.trim();
+                            if (
+                                nextLine &&
+                                nextLine.split(/\s+/)[0] === "else"
+                            ) {
+                                i++;
+                                emit("} else {");
+                                indent++;
+                                parseBlock("end");
+                                indent--;
+                            }
+                            emit("}");
+                        } else if (tokens[0] === "loop") {
+                            const varName = tokens[1];
+                            const count = tokens.slice(2).join(" ");
+                            emit(`{ int ${varName};`);
+                            emit(
+                                `for (${varName} = 0; ${varName} < (${count}); ${varName}++) {`,
+                            );
+                            indent += 2;
+                            parseBlock("end");
+                            indent -= 2;
+                            emit("} }");
+                        } else if (tokens[0] === "end") {
+                            return;
+                        } else {
+                            const eqIdx = tokens.indexOf("=");
+                            if (eqIdx > 0) {
+                                emit(
+                                    `${tokens.slice(0, eqIdx).join(" ")} = ${tokens.slice(eqIdx + 1).join(" ")};`,
+                                );
+                            } else {
+                                emit(`${tokens.join(" ")};`);
+                            }
+                        }
+                    }
+                }
+
+                parseLine();
+                return out;
+            }
+
+            runBtn.addEventListener("click", () => {
+                const src = textarea.value;
+                if (!src.trim()) {
+                    output.textContent = "// error: empty input";
+                    return;
+                }
+                status.textContent = "compiling...";
+                try {
+                    const result = stoneCompile(src);
+                    output.textContent = result;
+                    status.textContent = "ok — compiled";
+                } catch (e) {
+                    output.textContent = `// error: ${e.message}`;
+                    status.textContent = "error";
+                }
+            });
+        </script>
+    </body>
+</html>

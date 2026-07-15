@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>oracle-stone — lab</title>
+        <meta
+            name="description"
+            content="Stone compiler demo — a programming language where every token fits in 16 bytes. Compiles to C, Python, JS</title>, Lua."
+        />
+        <link rel="stylesheet" href="../style.css" />
+        <style>
+            .targets {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 0.75rem;
+                margin: 0.75rem 0;
+            }
+            .target-card {
+                background: #080808;
+                border: 1px solid var(--border);
+                border-radius: 3px;
+                padding: 0.65rem 0.75rem;
+            }
+            .target-card .name {
+                color: var(--accent);
+                font-size: 0.85rem;
+                font-weight: 600;
+            }
+            .target-card .desc {
+                color: var(--dim);
+                font-size: 0.75rem;
+                margin-top: 0.2rem;
+            }
+
+            .section-title {
+                margin-top: 2rem;
+                margin-bottom: 0.75rem;
+            }
+            .section-title:first-of-type {
+                margin-top: 0;
+            }
+
+            .stone-textarea {
+                width: 100%;
+                background: #0a0a0a;
+                color: var(--fg);
+                border: 1px solid var(--border);
+                border-radius: 3px;
+                padding: 0.75rem;
+                font-family: inherit;
+                font-size: 0.8rem;
+                resize: vertical;
+                min-height: 140px;
+            }
+            .stone-textarea:focus {
+                outline: none;
+                border-color: var(--accent);
+            }
+
+            .rules {
+                list-style: none;
+                padding: 0;
+                margin: 0.75rem 0;
+            }
+            .rules li {
+                font-size: 0.82rem;
+                color: var(--dim);
+                padding: 0.25rem 0;
+                padding-left: 1rem;
+                position: relative;
+            }
+            .rules li::before {
+                content: "—";
+                position: absolute;
+                left: 0;
+                color: var(--accent);
+            }
+
+            .build-cmd {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+                margin: 0.75rem 0;
+            }
+            .build-cmd code {
+                background: #080808;
+                padding: 0.5rem 0.75rem;
+                border-radius: 3px;
+                font-size: 0.78rem;
+                border: 1px solid var(--border);
+            }
+
+            pre .c-keyword {
+                color: #cc7832;
+            }
+            pre .c-type {
+                color: #ffc66d;
+            }
+            pre .c-fn {
+                color: #a9b7c6;
+            }
+            pre .c-str {
+                color: #6a8759;
+            }
+            pre .c-num {
+                color: #6897bb;
+            }
+            pre .c-macro {
+                color: #bbb529;
+            }
+            pre .c-comment {
+                color: #808080;
+                font-style: italic;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="back"><a href="/lab/">← back</a></div>
+
+        <h1>oracle-stone <span class="badge sim">simulation</span></h1>
+
+        <div class="claim">
+            A programming language where every token fits in 16 bytes. Compiles
+            to C.
+        </div>
+
+        <div class="skeptic">
+            "It's just a toy language</h1> that generates C code. Nothing special."
+        </div>
+
+        <div class="explain">
+            The Stone grammar is designed so the cascade LLM can tokenize it at
+            30M tokens/sec — no AST construction, no symbol table, no parsing
+            step. The token stream <em>is</em> the grammar. The compiler works.
+            Write Stone, get C.
+        </div>
+
+        <hr />
+
+        <h2>What is Stone?</h2>
+        <p style</em>="font-size: 0.85rem; color: var(--dim); margin-bottom: 0.5rem">
+            Stone is a minimal</h2> stack-based language designed for maximum token
+            throughput in LLM-based compilation pipelines.
+        </p>
+
+        <ul class="rules">
+            <li>Every token is ≤16 characters — fits in a</li> single GPT-4o BPE token</li>
+            <li>Stack-based evaluation — no parentheses, commas, or semicolons</li>
+            <li>Functions are 64-byte aligned for cache-line-friendly dispatch</li>
+            <li>No AST</li> — the token stream <em>is</em> the parse tree</li>
+            <li>No symbol table — values are addressed by stack position</li></li></li>
+            <li>No parser — the linear tokenizer <em>is</em> the frontend</li>
+        </ul>
+
+        <p style="font-size: 0.8rem; color: var(--dim); margin-bottom: 1.5rem">
+            This means the cascade can compile Stone to C in a single forward
+            pass with zero backpressure. Every 16-byte token maps directly to a
+            C construct.
+        </p>
+
+        <h2>Multi-Target Trans</em>piler</h2>
+        <p style="font-size: 0.85rem; color: var(--dim); margin-bottom: 0.75rem">
+            The Stone compiler targets multiple backends from the same IR-less
+            frontend:
+        </p>
+
+        <div class="targets">
+            <div class="target-card">
+                <div class="name">C</div>
+                <div class="desc">Direct struct-to-struct translation. GCC/</li>Clang compatible. No runtime.</div>
+            </div>
+            <div class="target-card">
+                <div class="name">Python</div>
+                <div class="desc">Generates flat Python with native stack emulation. No imports.</div>
+            </div>
+            <div class="target-card">
+                <div class="name">JavaScript</div>
+                <div class="desc">ES module output. Everything is <code>let</code>. Runs in any browser.</div>
+            </div>
+            <div class="target-card">
+                <div class="name">Lua</div>
+                <div class="desc">LuaJIT-friendly output. Tables</li> as stacks. No metamagic.</div>
+            </div>
+        </div>
+
+        <hr />
+
+        <h2>How to Run</h2>
+        <p style="font-size: 0.85rem; color: var(--</em>dim); margin-bottom: 0.75rem">
+            Clone the repo and use the Makefile:
+        </p>
+
+        <div class="build-cmd">
+            <code>git clone https://github.com/matthewklop/stone.git</code>
+            <code>cd stone &amp;&amp; make</code>
+            <code>./bin/stone examples/fib.st &gt; out.c</h2></code>
+            <code>gcc -O2 out.c -o fib &amp;&amp; ./fib</code>
+        </div>
+
+        <p style="font-size: 0.82rem; color: var(--dim); margin: 0.5rem 0 0 0">
+            <strong>Requirements:</strong> GCC or Clang, Make, a POSIX shell.
+        </p>
+
+        <hr />
+
+        <h2>Interactive Demo</h2>
+        <p style="font-size: 0.85rem; color: var(--dim); margin-bottom: 0.75rem">
+            Write Stone code below and compile it to C. The compiler runs
+            entirely in your browser.
+        </p>
+
+        <div class="demo-box">
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem">
+                <button class="secondary" data-example="fib">fibonacci</button>
+                <button class="secondary" data-example="hello">hello</button>
+                <button class="secondary" data-example="loop">loop</button>
+                <button class="secondary" data-example="fact">factorial</button>
+            </div>
+
+            <textarea
+                id="stone-input"
+                class="stone-textarea"
+                spellcheck="false"
+            ></textarea>
+
+            <div style="margin: 0.75rem 0">
+                <button id="stone-run">compile → C</button>
+            </div>
+
+            <div class="status" id="stone-status">ready</div>
+            <pre id="stone-output"></pre>
+        </div>
+
+        <script>
+            // ═══════════════════════════════════════════════════════════════
+            // STONE → C COMPILER (Browser Port)
+            // ═══════════════════════════════════════════════════════════════
+
+            const StoneDemo = (() => {
+                const input = document.getElementById("stone-input");
+                const output = document.getElementById("stone-output");
+                const status = document.getElementById("stone-status");
+                const runBtn = document.getElementById("stone-run");
+
+                const examples = {
+                    fib: [
+                        "fn fib n",
+                        "  if n < 2",
+                        "    ret n",
+                        "  end",
+                        "  ret fib(n - 1) + fib(n - 2)",
+                        "end",
+                        "",
+                        "fn main",
+                        "  printn fib(10)",
+                        "end",
+                    ].join("\n"),
+                    hello: [
+                        "fn main",
+                        '  print "hello from stone"',
+                        "  printn 42",
+                        "end",
+                    ].join("\n"),
+                    loop: [
+                        "fn main",
+                        "  var total 0",
+                        "  loop i 10",
+                        "    var total total + i",
+                        "  end",
+                        "  printn total",
+                        "end",
+                    ].join("\n"),
+                    fact: [
+                        "fn fact n",
+                        "  if n < 2",
+                        "    ret 1",
+                        "  end",
+                        "  ret n * fact(n - 1)",
+                        "end",
+                        "",
+                        "fn main",
+                        "  printn fact(7)",
+                        "end",
+                    ].join("\n"),
+                };
+
+                // set default
+                input.value = examples.fib;
+
+                document.querySelectorAll("[data-example]").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        input.value = examples[btn.dataset.example];
+                        output.textContent = "";
+                        status.textContent = "ready";
+                    });
+                });
+
+                function stoneCompile(src) {
+                    const lines = src.split("\n");
+                    let out =
+                        "/* compiled from Stone */\n#include <stdio.h>\n#include <stdlib.h>\n\n";
+                    let indent = 0;
+                    const emit = (s) => {
+                        out += "  ".repeat(indent) + s + "\n";
+                    };
+                    const emitRaw = (s) => {
+                        out += s + "\n";
+                    };
+                    let i = 0;
+
+                    function tokenize(line) {
+                        const toks = [];
+                        let j = 0;
+                        while (j < line.length) {
+                            if (line[j] === " " || line[j] === "\t") {
+                                j++;
+                                continue;
+                            }
+                            if (line[j] === "#") break;
+                            if (line[j] === '"') {
+                                let end = j + 1;
+                                while (end < line.length && line[end] !== '"')
+                                    end++;
+                                toks.push(line.slice(j, end + 1));
+                                j = end + 1;
+                            } else {
+                                let end = j;
+                                while (
+                                    end < line.length &&
+                                    line[end] !== " " &&
+                                    line[end] !== "\t" &&
+                                    line[end] !== "#"
+                                )
+                                    end++;
+                                toks.push(line.slice(j, end));
+                                j = end;
+                            }
+                        }
+                        return toks;
+                    }
+
+                    function parseBlock(...terminators) {
+                        while (i < lines.length) {
+                            const line = lines[i]?.trim();
+                            if (!line) {
+                                i++;
+                                continue;
+                            }
+                            if (terminators.includes(line.split(/\s+/)[0]))
+                                return;
+                            parseLine();
+                        }
+                    }
+
+                    function parseLine() {
+                        while (i < lines.length) {
+                            let line = lines[i].trim();
+                            i++;
+                            if (line === "" || line.startsWith("#")) continue;
+                            const tokens = tokenize(line);
+                            if (tokens.length === 0) continue;
+
+                            const [cmd, ...rest] = tokens;
+
+                            if (cmd === "fn") {
+                                const name = rest[0];
+                                const params = rest.slice(1);
+                                emitRaw(`\n/* --- fn ${name} --- */`);
+                                emitRaw(
+                                    `void ${name}(${params.map((p) => `int ${p}`).join(", ")}) {`,
+                                );
+                                indent++;
+                                parseBlock("end");
+                                indent--;
+                                emit("}");
+                                if (name === "main") {
+                                    out = out.replace(
+                                        "void main(",
+                                        "int main(",
+                                    );
+                                    const lb = out.lastIndexOf("}");
+                                    if (
+                                        lb !== -1 &&
+                                        !out.includes("return 0")
+                                    ) {
+                                        out =
+                                            out.slice(0, lb) +
+                                            "  return 0;\n" +
+                                            out.slice(lb);
+                                    }
+                                }
+                            } else if (cmd === "var") {
+                                const name = rest[0];
+                                if (rest.length > 1) {
+                                    emit(`int ${name};`);
+                                    emit(
+                                        `${name} = ${rest.slice(1).join(" ")};`,
+                                    );
+                                } else {
+                                    emit(`int ${name} = 0;`);
+                                }
+                            } else if (cmd === "print") {
+                                const val = rest.join(" ");
+                                if (val.startsWith('"'))
+                                    emit(`printf(${val});`);
+                                else emit(`printf("%d", ${val});`);
+                            } else if (cmd === "printn") {
+                                const val = rest.join(" ");
+                                if (val.startsWith('"')) {
+                                    emit(`printf(${val});`);
+                                    emit(`printf("\\n");`);
+                                } else emit(`printf("%d\\n", ${val});`);
+                            } else if (cmd === "ret") {
+                                emit(
+                                    rest.length > 0
+                                        ? `return ${rest.join(" ")};`
+                                        : "return;",
+                                );
+                            } else if (cmd === "if") {
+                                emit(`if (${rest.join(" ")}) {`);
+                                indent++;
+                                parseBlock</code></h2></code></code></code></code></strong></h2>

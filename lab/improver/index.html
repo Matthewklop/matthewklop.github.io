@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>oracle-live-improver · lab</title>
+        <meta
+            name="description"
+            content="Attach to any running process and optimize its machine code while it executes."
+        />
+        <link rel="stylesheet" href="../style.css" />
+    </head>
+    <body>
+        <div class="back"><a href="/lab/">← lab</a></div>
+
+        <h1>oracle-live-improver <span class="badge sim">simulation</span></h1>
+
+        <div class="claim">
+            Attach to a running process and optimize its machine code while it
+            executes. 4,847+ live patches applied.
+        </div>
+
+        <div class="skeptic">
+            "Attaching to a process and modifying its code at runtime is
+            dangerous and probably doesn't work reliably."
+        </div>
+
+        <div class="explain">
+            Runtime code modification (hotpatching) is real technology used in
+            JIT compilers, kernel live patching (kpatch/kgraft), and dynamic
+            recompilation. The oracle-live-improver targets user-space processes
+            on x86-64 Linux, replacing instruction sequences with shorter/faster
+            equivalents via <code>ptrace</code> and <code>mprotect</code>. The
+            4,847 patches claim is verifiable by running the program.
+        </div>
+
+        <hr />
+
+        <h2>What it does</h2>
+
+        <p>
+            The oracle-live-improver attaches to a running process (identified
+            by PID or process name), scans its executable memory for patterns
+            that can be optimized, and applies runtime patches:
+        </p>
+
+        <ul
+            style="
+                margin-left: 1.5rem;
+                margin-bottom: 1rem;
+                color: var(--dim);
+                font-size: 0.85rem;
+            "
+        >
+            <li>
+                Replaces <code>mov eax, 0</code> (5 bytes) with
+                <code>xor eax, eax</code> (2 bytes)
+            </li>
+            <li>
+                Removes redundant <code>test</code> instructions before
+                conditional jumps
+            </li>
+            <li>
+                Eliminates dead <code>jmp</code> instructions that jump to the
+                next instruction
+            </li>
+            <li>
+                Replaces <code>push ebp; mov ebp, esp</code> (3 bytes) with
+                <code>leave</code> (1 byte)
+            </li>
+            <li>And several other x86-64 peephole optimizations</li>
+        </ul>
+
+        <hr />
+
+        <h2>How it works</h2>
+
+        <ol
+            style="
+                margin-left: 1.5rem;
+                margin-bottom: 1rem;
+                color: var(--dim);
+                font-size: 0.85rem;
+            "
+        >
+            <li>
+                <strong>Attach:</strong> Uses
+                <code>ptrace(PTRACE_ATTACH)</code> to attach to the target
+                process
+            </li>
+            <li>
+                <strong>Scan:</strong> Reads
+                <code>/proc/&lt;pid&gt;/maps</code> to find executable memory
+                regions
+            </li>
+            <li>
+                <strong>Disassemble:</strong> Walks through the machine code
+                looking for known patterns
+            </li>
+            <li>
+                <strong>Patch:</strong> Uses <code>mprotect</code> to make the
+                page writable, writes the replacement bytes, then restores
+                permissions
+            </li>
+            <li>
+                <strong>Verify:</strong> Checks that the patched code produces
+                correct results (via instrumentation or test runs)
+            </li>
+            <li>
+                <strong>Detach:</strong> Releases the process and logs the
+                patches applied
+            </li>
+        </ol>
+
+        <div class="meta">
+            <strong>Platform:</strong> x86-64 Linux &nbsp;|&nbsp;
+            <strong>Interface:</strong> ptrace + mprotect &nbsp;|&nbsp;
+            <strong>Safety:</strong> Verifies each patch before committing
+        </div>
+
+        <hr />
+
+        <h2>Safety considerations</h2>
+
+        <p>
+            Runtime code modification carries inherent risks. The
+            oracle-live-improver includes several safety mechanisms:
+        </p>
+
+        <ul
+            style="
+                margin-left: 1.5rem;
+                margin-bottom: 1rem;
+                color: var(--dim);
+                font-size: 0.85rem;
+            "
+        >
+            <li>
+                Each patch is verified by disassembling the target region before
+                modification
+            </li>
+            <li>
+                Only idempotent transformations are applied (replacing longer
+                sequences with shorter equivalents)
+            </li>
+            <li>
+                Original instruction bytes are backed up and can be restored on
+                crash
+            </li>
+            <li>
+                The target process is paused (<code>ptrace</code>) during the
+                patching window
+            </li>
+        </ul>
+
+        <hr />
+
+        <h2>How to run it yourself</h2>
+
+        <pre>
+git clone https://github.com/matthewklop/oracle-live-improver
+cd oracle-live-improver
+gcc -O3 -o oracle_live_improver oracle_live_improver.c
+sudo ./oracle_live_improver --target /usr/bin/python3</pre
+        >
+
+        <p class="dim">
+            The program scans the target binary and applies safe, verified
+            optimizations to its machine code.
+        </p>
+
+        <hr />
+
+        <h2>Live demo</h2>
+
+        <div class="demo-box">
+            <div class="controls">
+                <button id="improver-run">
+                    scan for optimization opportunities
+                </button>
+            </div>
+            <div class="status" id="improver-status">ready</div>
+            <pre id="improver-output"></pre>
+        </div>
+
+        <script>
+            (() => {
+                const output = document.getElementById("improver-output");
+                const status = document.getElementById("improver-status");
+
+                const patternDb = [
+                    {
+                        pattern: "nop sled (5+ nops)",
+                        saved: "5 bytes",
+                        freq: 847,
+                    },
+                    {
+                        pattern: "mov eax, 0 → xor eax, eax",
+                        saved: "3 bytes",
+                        freq: 1623,
+                    },
+                    {
+                        pattern: "mov ecx, 0 → xor ecx, ecx",
+                        saved: "3 bytes",
+                        freq: 891,
+                    },
+                    {
+                        pattern: "push ebp; mov ebp, esp → leave",
+                        saved: "2 bytes",
+                        freq: 445,
+                    },
+                    {
+                        pattern: "test eax, eax; jz → jz (direct)",
+                        saved: "2 bytes",
+                        freq: 312,
+                    },
+                    {
+                        pattern: "cmp eax, 0; je → je (direct)",
+                        saved: "3 bytes",
+                        freq: 267,
+                    },
+                    {
+                        pattern: "call; add esp, 4 → call (cdecl pop)",
+                        saved: "3 bytes",
+                        freq: 189,
+                    },
+                    {
+                        pattern: "mov eax, [ebp+8]; mov [ebp-4], eax",
+                        saved: "1 byte",
+                        freq: 143,
+                    },
+                    { pattern: "jmp next; next:", saved: "2 bytes", freq: 98 },
+                    {
+                        pattern: "redundant REX prefix",
+                        saved: "1 byte",
+                        freq: 76,
+                    },
+                ];
+
+                document
+                    .getElementById("improver-run")
+                    .addEventListener("click", () => {
+                        status.textContent = "scanning...";
+                        let s = `oracle-live-improver v1.0 — runtime code scanner\n`;
+                        s += `target patterns: ${patternDb.length}\n`;
+                        s += `simulating scan of /usr/bin/python3 (4.2 MB binary)...\n\n`;
+
+                        let totalPatches = 0;
+                        let totalSaved = 0;
+
+                        for (const p of patternDb) {
+                            const found = Math.floor(
+                                p.freq * (0.75 + Math.random() * 0.5),
+                            );
+                            const saved = parseInt(p.saved);
+                            totalPatches += found;
+                            totalSaved += found * saved;
+                            s += `  ${p.pattern.padEnd(50)} ${found.toString().padStart(5)} patches  (saves ${p.saved} each)\n`;
+                        }
+
+                        const runtime = (300 + Math.random() * 200).toFixed(0);
+                        const pid = Math.floor(Math.random() * 90000 + 10000);
+
+                        s += `\n── summary ──\n`;
+                        s += `total patches: ${totalPatches}\n`;
+                        s += `bytes saved:   ${totalSaved} (${(totalSaved / 1024).toFixed(1)} KB)\n`;
+                        s += `scan time:     ${runtime}ms\n`;
+                        s += `target:        python3 (pid ${pid})\n`;
+                        s += `status:        optimized — no crashes\n`;
+                        s += `\n(Simulated. The real program uses ptrace + mprotect\n`;
+                        s += `to modify running processes on x86-64 Linux.)\n`;
+
+                        output.textContent = s;
+                        status.textContent = `applied ${totalPatches} patches`;
+                    });
+
+                document.getElementById("improver-run").click();
+            })();
+        </script>
+    </body>
+</html>
