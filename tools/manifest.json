@@ -35,7 +35,19 @@
       "example_input": "fn fib n\n  if n < 2\n    ret n\n  end\n  ret fib(n - 1) + fib(n - 2)\nend\n\nfn main\n  printn fib(10)\nend",
       "grammar": {
         "tokens_max_length": 16,
-        "keywords": ["fn", "end", "var", "if", "else", "loop", "print", "printn", "ret", "and", "or"],
+        "keywords": [
+          "fn",
+          "end",
+          "var",
+          "if",
+          "else",
+          "loop",
+          "print",
+          "printn",
+          "ret",
+          "and",
+          "or"
+        ],
         "operators": ["+", "-", "*", "/", ">", "<", "=", "&", "|"],
         "separator": "newline",
         "comment": "# to end of line"
@@ -75,7 +87,15 @@
           "truth_table": { "type": "array", "items": { "type": "string" } }
         }
       },
-      "known_circuits": ["half adder", "full adder", "4-bit adder", "32-bit adder", "D flip-flop", "4-bit register", "3-input NAND"],
+      "known_circuits": [
+        "half adder",
+        "full adder",
+        "4-bit adder",
+        "32-bit adder",
+        "D flip-flop",
+        "4-bit register",
+        "3-input NAND"
+      ],
       "tags": ["circuit", "silicon", "hardware", "reference"]
     },
     {
@@ -192,6 +212,229 @@
         }
       },
       "tags": ["optimizer", "runtime", "x86", "ptrace"]
+    },
+    {
+      "id": "mesh-state",
+      "name": "Oracle Mesh State Reader",
+      "description": "Read the state of a distributed mesh of AI processes sharing memory via shm_open + mmap. Returns active nodes, their thought vectors, resonance, and heartbeat status.",
+      "wasm": "wasm/oracle-mesh.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "readMeshState",
+        "input_type": "object",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "integer",
+            "description": "Number of mesh nodes to simulate",
+            "default": 5
+          },
+          "cycles": {
+            "type": "integer",
+            "description": "Simulation cycles",
+            "default": 100
+          }
+        }
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "active_nodes": { "type": "integer" },
+          "resonance": { "type": "number" },
+          "entropy": { "type": "number" },
+          "nodes": { "type": "array" },
+          "thought_convergence": { "type": "number" }
+        }
+      },
+      "tags": ["mesh", "distributed", "consciousness", "shm"]
+    },
+    {
+      "id": "zero-sound-think",
+      "name": "Zero Sound Thought Simulator",
+      "description": "Simulate a zero-sound AI process that exists only while thinking. Process is born, thinks, writes result to shared memory, and dies. No idle power cost.",
+      "wasm": "wasm/oracle-zero-sound.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "zeroSoundThink",
+        "input_type": "object",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "thought": {
+            "type": "string",
+            "description": "The thought/question for the zero-sound process to ponder"
+          },
+          "generations": {
+            "type": "integer",
+            "description": "Number of evolutionary generations",
+            "default": 10
+          }
+        },
+        "required": ["thought"]
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "answer": { "type": "string" },
+          "generations_evolved": { "type": "integer" },
+          "shared_memory_state": { "type": "string" },
+          "processes_spawned": { "type": "integer" }
+        }
+      },
+      "tags": ["zero-sound", "ephemeral", "thought", "shared-memory"]
+    },
+    {
+      "id": "firmware-size-analyzer",
+      "name": "99x Firmware Size Analyzer",
+      "description": "Analyze C source code and estimate minimal firmware size on ESP32/AVR. Reports which parts can be stripped and the theoretical minimum size.",
+      "wasm": "wasm/99x-esp32.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "analyzeFirmwareSize",
+        "input_type": "object",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "source_code": {
+            "type": "string",
+            "description": "C source code to analyze"
+          },
+          "target": {
+            "type": "string",
+            "enum": ["esp32-c3", "esp32", "arduino-uno"],
+            "description": "Target microcontroller",
+            "default": "esp32-c3"
+          }
+        },
+        "required": ["source_code"]
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "estimated_size_bytes": { "type": "integer" },
+          "minimal_size_bytes": { "type": "integer" },
+          "bloat_found": { "type": "array", "items": { "type": "string" } },
+          "removable_libraries": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "pin_toggle_hz": { "type": "integer" },
+          "boot_time_us": { "type": "number" }
+        }
+      },
+      "tags": ["embedded", "esp32", "firmware", "optimization", "avr"]
+    },
+    {
+      "id": "overdraw-canvas",
+      "name": "OverDraw Canvas",
+      "description": "Simulate X11 drawing operations. Render text, shapes, and pixels to a virtual canvas. Pure C, pure X11 protocol.",
+      "wasm": "wasm/overdraw.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "drawToCanvas",
+        "input_type": "object",
+        "output_type": "string"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "commands": {
+            "type": "array",
+            "description": "Array of drawing commands: ['rect x y w h', 'text x y string', 'pixel x y color', 'clear']",
+            "items": { "type": "string" }
+          },
+          "width": {
+            "type": "integer",
+            "description": "Canvas width",
+            "default": 400
+          },
+          "height": {
+            "type": "integer",
+            "description": "Canvas height",
+            "default": 300
+          }
+        },
+        "required": ["commands"]
+      },
+      "returns": {
+        "type": "string",
+        "description": "ASCII art representation of the canvas"
+      },
+      "tags": ["x11", "drawing", "canvas", "graphics"]
+    },
+    {
+      "id": "storage-self-inverse",
+      "name": "Oracle Self-Inverse Transform",
+      "description": "Apply a self-inverse byte transform. Same function reads and writes — zero separate decode logic. Compression and decompression in one pass.",
+      "wasm": "wasm/oracle-storage.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "selfInverseTransform",
+        "input_type": "string",
+        "output_type": "string"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Data to transform (applying twice returns original)"
+          }
+        },
+        "required": ["data"]
+      },
+      "returns": {
+        "type": "string",
+        "description": "Transformed data. Apply again to reverse."
+      },
+      "tags": ["transform", "self-inverse", "encode", "decode"]
+    },
+    {
+      "id": "instant-ocr",
+      "name": "Instant OCR",
+      "description": "Extract text from an image using a zero-configuration OCR pipeline. Paste a screenshot URL or base64 data, get text back.",
+      "wasm": "wasm/instant-ocr.wasm",
+      "invocation": {
+        "method": "postMessage",
+        "type": "function_call",
+        "entry": "ocrImage",
+        "input_type": "object",
+        "output_type": "object"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "description": "URL of image to OCR"
+          },
+          "base64_data": {
+            "type": "string",
+            "description": "Base64-encoded image data (alternative to URL)"
+          }
+        }
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "confidence": { "type": "number" },
+          "characters_detected": { "type": "integer" }
+        }
+      },
+      "tags": ["ocr", "image", "text", "screenshot"]
     }
   ]
 }
