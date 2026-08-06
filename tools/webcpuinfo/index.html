@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>webcpuinfo — see your machine, right in the browser</title>
+<meta name="description" content="Detect your CPU cores, memory, GPU, browser and OS, and run an honest in-browser benchmark. No install, no server, no tracking.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>webcpuinfo</h1>
+  <p class="tag">What your computer actually has — detected right in the browser.</p>
+</header>
+
+<main>
+  <section class="status" id="status">Reading your machine…</section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Processor</h2>
+      <dl id="cpu-panel">
+        <div><dt>Logical cores</dt><dd id="f-cores">…</dd></div>
+        <div><dt>Architecture hints</dt><dd id="f-arch">…</dd></div>
+        <div><dt>SIMD guess</dt><dd id="f-simd">…</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Memory</h2>
+      <dl id="mem-panel">
+        <div><dt>Device RAM</dt><dd id="f-ram">…</dd></div>
+        <div><dt>JS heap limit</dt><dd id="f-heap">…</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Graphics</h2>
+      <dl id="gpu-panel">
+        <div><dt>Adapter</dt><dd id="f-gpu">…</dd></div>
+        <div><dt>Vendor</dt><dd id="f-gpu-vendor">…</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>System</h2>
+      <dl id="sys-panel">
+        <div><dt>Platform</dt><dd id="f-platform">…</dd></div>
+        <div><dt>User agent</dt><dd id="f-ua">…</dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <section class="card bench">
+    <h2>Benchmark — integer ops/sec</h2>
+    <p class="hint">Runs pure JavaScript integer math in this tab. Lower is your machine; compare after a refresh.</p>
+    <button id="run-bench">Run benchmark</button>
+    <div class="result" id="bench-result"></div>
+  </section>
+
+  <footer class="note">
+    Everything runs locally in your browser. Nothing is uploaded. Detection uses
+    standard browser APIs; a browser can report cores/memory/GPU but not the raw
+    CPU model string — that would need OS- or WASM-level access.
+  </footer>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
