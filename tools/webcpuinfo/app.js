@@ -48,14 +48,35 @@
     const dm = navigator.deviceMemory; // Chrome only
     set('f-ram', dm ? dm + ' GiB (deviceMemory)' : '—');
     if (performance && performance.memory) {
+      // This is the per-tab JS heap cap, NOT device RAM. Label it as such so it
+      // doesn't get mistaken for the machine's actual memory.
       set('f-heap', (performance.memory.jsHeapSizeLimit>>20) + ' MiB');
     } else {
       set('f-heap', '—');
     }
   }
 
+  /* GPU detection with fallback chain: WebGPU → WebGL → honest '—'.
+     The i5-8500T's Intel UHD 630 usually plays nice with WebGL's
+     UNMASKED_RENDERER_WEBGL even when navigator.gpu is absent. */
+  function webglGPU() {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) return null;
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (!ext) return null;
+      const renderer = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '').trim();
+      const vendor   = String(gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) || '').trim();
+      if (!renderer && !vendor) return null;
+      return { renderer, vendor };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function gpuInfo() {
-    // WebGPU adapter gives real adapter info where available (Chrome/Edge).
+    // 1) WebGPU adapter gives real adapter info where available (Chrome/Edge).
     if (navigator.gpu) {
       try {
         const a = await navigator.gpu.requestAdapter();
@@ -67,6 +88,14 @@
         }
       } catch (e) { /* no WebGPU adapter */ }
     }
+    // 2) Fall back to WebGL debug renderer info (works on Intel iGPU).
+    const wgl = webglGPU();
+    if (wgl) {
+      set('f-gpu', wgl.renderer || '—');
+      set('f-gpu-vendor', wgl.vendor || '—');
+      return;
+    }
+    // 3) Honest '—'.
     set('f-gpu', '—');
     set('f-gpu-vendor', '—');
   }
